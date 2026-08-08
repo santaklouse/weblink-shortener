@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="A simple URL shortener with click statistics" />
+    <title>Short URL</title>
+    <link rel="stylesheet" href="/styles.css?v=3" />
+    <script src="/app.js?v=3" defer></script>
+  </head>
+  <body>
+    <main class="shell">
+      <div class="stack">
+        <section class="card" aria-labelledby="page-title">
+          <header class="topbar">
+            <p class="eyebrow">WEBLINK SHORTENER</p>
+            <div id="user-summary" class="user-summary" hidden>
+              <span id="user-email"></span>
+              <button id="logout-button" class="text-button" type="button">Sign out</button>
+            </div>
+          </header>
+
+          <h1 id="page-title">Shorten your URL</h1>
+          <p class="intro">Guest links expire after 24 hours. Sign in to create permanent links and choose a custom slug.</p>
+
+          <form id="shorten-form" novalidate>
+            <label for="url">Long URL</label>
+            <input id="url" name="url" type="url" inputmode="url" autocomplete="url" placeholder="https://example.com/long/link" required />
+
+            <div id="alias-field" hidden>
+              <label for="alias">Custom slug <span>(optional)</span></label>
+              <div class="alias-row">
+                <span id="domain-prefix" aria-hidden="true">/</span>
+                <input id="alias" name="alias" type="text" minlength="4" maxlength="32" pattern="[a-zA-Z0-9_-]{4,32}" autocomplete="off" placeholder="my-link" />
+              </div>
+            </div>
+
+            <button type="submit">Shorten URL</button>
+            <p id="form-message" class="message" role="status" aria-live="polite"></p>
+          </form>
+
+          <section id="result" class="result" hidden aria-labelledby="result-title">
+            <p id="result-title">Your short URL</p>
+            <div class="result-row">
+              <a id="short-url" href="#" target="_blank" rel="noopener noreferrer"></a>
+              <button id="copy-button" class="secondary" type="button">Copy</button>
+            </div>
+            <a id="stats-url" class="stats-link" href="#">View statistics</a>
+            <small id="expiry-note"></small>
+          </section>
+        </section>
+
+        <section id="auth-card" class="card compact" aria-labelledby="auth-title">
+          <h2 id="auth-title">Sign in or create an account</h2>
+          <div class="auth-grid">
+            <form id="login-form">
+              <h3>Sign in</h3>
+              <label for="login-email">Email</label>
+              <input id="login-email" name="email" type="email" autocomplete="email" required />
+              <label for="login-password">Password</label>
+              <input id="login-password" name="password" type="password" autocomplete="current-password" minlength="8" required />
+              <button type="submit">Sign in</button>
+              <p class="message" role="status" aria-live="polite"></p>
+            </form>
+
+            <form id="register-form">
+              <h3>Create an account</h3>
+              <label for="register-email">Email</label>
+              <input id="register-email" name="email" type="email" autocomplete="email" required />
+              <label for="register-password">Password</label>
+              <input id="register-password" name="password" type="password" autocomplete="new-password" minlength="8" maxlength="72" required />
+              <button type="submit">Register</button>
+              <p class="message" role="status" aria-live="polite"></p>
+            </form>
+          </div>
+        </section>
+
+        <section id="dashboard" class="card compact" hidden aria-labelledby="dashboard-title">
+          <div class="topbar">
+            <h2 id="dashboard-title">My links</h2>
+            <button id="refresh-button" class="text-button" type="button">Refresh</button>
+          </div>
+          <p id="links-message" class="message" role="status"></p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Link</th><th>Clicks</th><th>Created</th><th>Statistics</th><th>Actions</th></tr>
+              </thead>
+              <tbody id="links-body"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>

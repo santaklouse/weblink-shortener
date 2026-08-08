@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>Link statistics</title>
+    <link rel="stylesheet" href="/styles.css?v=3" />
+    <script src="/stats.js?v=3" defer></script>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="card compact" aria-labelledby="stats-title">
+        <p class="eyebrow">STATISTICS</p>
+        <h1 id="stats-title">Link clicks</h1>
+        <p id="stats-message" class="message" role="status">Loading…</p>
+        <dl id="stats-data" class="stats-data" hidden>
+          <div><dt>Short URL</dt><dd><a id="stats-short-url" href="#"></a></dd></div>
+          <div><dt>Destination</dt><dd><a id="stats-target-url" href="#" rel="nofollow noreferrer"></a></dd></div>
+          <div><dt>Clicks</dt><dd id="stats-clicks"></dd></div>
+          <div><dt>Created</dt><dd id="stats-created"></dd></div>
+          <div><dt>Status</dt><dd id="stats-status"></dd></div>
+        </dl>
+        <a href="/">Create another short URL</a>
+      </section>
+    </main>
+  </body>
+</html>
