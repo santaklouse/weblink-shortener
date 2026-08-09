@@ -390,6 +390,65 @@ td:first-child {
   text-overflow: ellipsis;
 }
 
+.stats-data dd.stats-url-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stats-url-row a {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button.copy-url-button {
+  display: grid;
+  width: 32px;
+  min-height: 32px;
+  flex: none;
+  place-items: center;
+  margin: 0;
+  padding: 0;
+  border: 1px solid #cbd5da;
+  border-radius: 9px;
+  background: #fff;
+  color: #263746;
+}
+
+.copy-url-button svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.copy-url-button .copied-icon {
+  display: none;
+}
+
+button.copy-url-button:hover:not(:disabled) {
+  background: #f3f7f8;
+}
+
+button.copy-url-button.copied {
+  border-color: #9bd2c4;
+  background: #effaf7;
+  color: #126c58;
+}
+
+.copy-url-button.copied .copy-icon {
+  display: none;
+}
+
+.copy-url-button.copied .copied-icon {
+  display: block;
+}
+
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -38,6 +38,51 @@ function renderLink(link) {
       : "Disabled";
 }
 
+async function copyText(value) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  const input = document.createElement("textarea");
+  input.value = value;
+  input.setAttribute("readonly", "");
+  input.style.position = "fixed";
+  input.style.opacity = "0";
+  document.body.append(input);
+  input.select();
+  const copied = document.execCommand("copy");
+  input.remove();
+  if (!copied) throw new Error("Copy command was rejected");
+}
+
+for (const button of document.querySelectorAll(".copy-url-button")) {
+  button.addEventListener("click", async () => {
+    const anchor = document.querySelector(`#${button.dataset.copyTarget}`);
+    if (!anchor?.textContent) return;
+
+    const originalLabel = button.getAttribute("aria-label");
+    const originalTitle = button.title;
+    button.disabled = true;
+    try {
+      await copyText(anchor.textContent);
+      button.setAttribute("aria-label", "URL copied");
+      button.title = "Copied";
+      button.classList.add("copied");
+      window.setTimeout(() => {
+        button.setAttribute("aria-label", originalLabel);
+        button.title = originalTitle;
+        button.classList.remove("copied");
+        button.disabled = false;
+      }, 1_500);
+    } catch {
+      button.disabled = false;
+      message.textContent = "Could not copy the URL automatically.";
+      message.classList.add("error");
+    }
+  });
+}
+
 function renderAnalytics(analytics) {
   document.querySelector("#total-clicks").textContent = String(analytics.totals.clicks);
   document.querySelector("#unique-visitors").textContent = String(analytics.totals.uniqueVisitors);

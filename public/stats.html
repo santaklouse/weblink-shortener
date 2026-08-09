@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex,nofollow" />
     <title>Link statistics</title>
-    <link rel="stylesheet" href="/styles.css?v=5" />
-    <script src="/stats.js?v=4" defer></script>
+    <link rel="stylesheet" href="/styles.css?v=8" />
+    <script src="/stats.js?v=6" defer></script>
   </head>
   <body>
     <main class="shell">
@@ -15,8 +15,26 @@
         <h1 id="stats-title">Link clicks</h1>
         <p id="stats-message" class="message" role="status">Loading…</p>
         <dl id="stats-data" class="stats-data" hidden>
-          <div><dt>Short URL</dt><dd><a id="stats-short-url" href="#"></a></dd></div>
-          <div><dt>Destination</dt><dd><a id="stats-target-url" href="#" rel="nofollow noreferrer"></a></dd></div>
+          <div>
+            <dt>Short URL</dt>
+            <dd class="stats-url-row">
+              <a id="stats-short-url" href="#"></a>
+              <button class="copy-url-button" type="button" data-copy-target="stats-short-url" aria-label="Copy short URL" title="Copy short URL">
+                <svg class="copy-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 7V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M5 8h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2Z"/></svg>
+                <svg class="copied-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
+              </button>
+            </dd>
+          </div>
+          <div>
+            <dt>Destination</dt>
+            <dd class="stats-url-row">
+              <a id="stats-target-url" href="#" rel="nofollow noreferrer"></a>
+              <button class="copy-url-button" type="button" data-copy-target="stats-target-url" aria-label="Copy destination URL" title="Copy destination URL">
+                <svg class="copy-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 7V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M5 8h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2Z"/></svg>
+                <svg class="copied-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
+              </button>
+            </dd>
+          </div>
           <div><dt>Clicks</dt><dd id="stats-clicks"></dd></div>
           <div><dt>Created</dt><dd id="stats-created"></dd></div>
           <div><dt>Status</dt><dd id="stats-status"></dd></div>
