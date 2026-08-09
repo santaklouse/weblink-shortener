@@ -2,21 +2,41 @@ const message = document.querySelector("#stats-message");
 const statsData = document.querySelector("#stats-data");
 const analyticsData = document.querySelector("#analytics-data");
 const token = window.location.pathname.split("/").filter(Boolean).at(-1);
+const refreshIntervalMs = 10_000;
+let refreshTimer;
+let requestInFlight = false;
+let hasLoadedStats = false;
 
-async function loadStats() {
+function scheduleRefresh() {
+  window.clearTimeout(refreshTimer);
+  if (document.hidden) return;
+  refreshTimer = window.setTimeout(() => loadStats({ background: true }), refreshIntervalMs);
+}
+
+async function loadStats({ background = false } = {}) {
+  if (requestInFlight) return;
+  requestInFlight = true;
+
   try {
-    const response = await fetch(`/api/stats/${encodeURIComponent(token)}`);
+    const response = await fetch(`/api/stats/${encodeURIComponent(token)}`, { cache: "no-store" });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Statistics not found");
 
     renderLink(data.link);
     renderAnalytics(data.analytics);
     message.textContent = "";
+    message.classList.remove("error");
     statsData.hidden = false;
     analyticsData.hidden = false;
+    hasLoadedStats = true;
   } catch (error) {
-    message.textContent = error.message;
+    message.textContent = background && hasLoadedStats
+      ? "Live update delayed. Retrying automatically…"
+      : error.message;
     message.classList.add("error");
+  } finally {
+    requestInFlight = false;
+    scheduleRefresh();
   }
 }
 
@@ -149,5 +169,16 @@ function emptyRow(columns, text) {
   row.append(element);
   return row;
 }
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    window.clearTimeout(refreshTimer);
+  } else {
+    loadStats({ background: true });
+  }
+});
+
+window.addEventListener("online", () => loadStats({ background: true }));
+window.addEventListener("beforeunload", () => window.clearTimeout(refreshTimer));
 
 loadStats();

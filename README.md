@@ -14,6 +14,7 @@ A minimal Node.js URL shortener with PocketBase running behind the application.
 - Registered owners can enable, disable, and delete their links.
 - Clicks are incremented atomically.
 - Detailed analytics include country, referrer, masked visitor network, device, browser, operating system, and recent click time.
+- Open statistics pages refresh their data in the background every 10 seconds without a page reload.
 - Unique visitors are counted with a keyed hash; full IP addresses are never stored.
 - PocketBase Dashboard is available on a separate administrator hostname.
 - The public hostname proxies only to Node.js. PocketBase credentials and API calls are never exposed to the browser.
