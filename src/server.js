@@ -1,5 +1,6 @@
 import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
+import { createGeoIpResolver } from "./geoip.js";
 import { connectPocketBase, createPocketBaseClient } from "./pocketbase.js";
 
 async function main() {
@@ -7,8 +8,9 @@ async function main() {
   const client = createPocketBaseClient(config);
 
   await connectPocketBase(client, config);
+  const geoIpResolver = await createGeoIpResolver(config);
 
-  const app = createApp({ client, config });
+  const app = createApp({ client, config, geoIpResolver });
   const server = app.listen(config.port, config.host, () => {
     console.log(`URL shortener started at http://${config.host}:${config.port}`);
   });

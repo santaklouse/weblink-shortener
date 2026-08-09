@@ -5,12 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex,nofollow" />
     <title>Link statistics</title>
-    <link rel="stylesheet" href="/styles.css?v=3" />
-    <script src="/stats.js?v=3" defer></script>
+    <link rel="stylesheet" href="/styles.css?v=5" />
+    <script src="/stats.js?v=4" defer></script>
   </head>
   <body>
     <main class="shell">
-      <section class="card compact" aria-labelledby="stats-title">
+      <section class="card compact wide" aria-labelledby="stats-title">
         <p class="eyebrow">STATISTICS</p>
         <h1 id="stats-title">Link clicks</h1>
         <p id="stats-message" class="message" role="status">Loading…</p>
@@ -21,6 +21,48 @@
           <div><dt>Created</dt><dd id="stats-created"></dd></div>
           <div><dt>Status</dt><dd id="stats-status"></dd></div>
         </dl>
+
+        <section id="analytics-data" hidden>
+          <div class="metric-grid" aria-label="Traffic summary">
+            <article><strong id="total-clicks">0</strong><span>Total clicks</span></article>
+            <article><strong id="unique-visitors">0</strong><span>Unique visitors</span></article>
+            <article><strong id="recorded-events">0</strong><span>Detailed events</span></article>
+          </div>
+
+          <div class="analytics-grid">
+            <section>
+              <h2>Countries</h2>
+              <table><thead><tr><th>Country</th><th>Clicks</th></tr></thead><tbody id="countries-body"></tbody></table>
+            </section>
+            <section>
+              <h2>Referrers</h2>
+              <table><thead><tr><th>Source</th><th>Clicks</th></tr></thead><tbody id="referrers-body"></tbody></table>
+            </section>
+            <section>
+              <h2>Devices</h2>
+              <table><thead><tr><th>Device</th><th>Clicks</th></tr></thead><tbody id="devices-body"></tbody></table>
+            </section>
+            <section>
+              <h2>Browsers</h2>
+              <table><thead><tr><th>Browser</th><th>Clicks</th></tr></thead><tbody id="browsers-body"></tbody></table>
+            </section>
+            <section>
+              <h2>Operating systems</h2>
+              <table><thead><tr><th>OS</th><th>Clicks</th></tr></thead><tbody id="os-body"></tbody></table>
+            </section>
+          </div>
+
+          <section class="recent-clicks">
+            <h2>Recent clicks</h2>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Time</th><th>Country</th><th>Referrer</th><th>Visitor address</th><th>Client</th></tr></thead>
+                <tbody id="recent-clicks-body"></tbody>
+              </table>
+            </div>
+            <p class="privacy-note">Visitor addresses are privacy-masked: IPv4 /24 and IPv6 /48. Country data is approximate.</p>
+          </section>
+        </section>
         <a href="/">Create another short URL</a>
       </section>
     </main>

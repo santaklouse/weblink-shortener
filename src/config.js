@@ -35,6 +35,11 @@ const schema = z
       .default("weblink_session"),
     SESSION_MAX_AGE_DAYS: z.coerce.number().int().min(1).max(30).default(7),
     ANONYMOUS_LINK_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(24),
+    ANALYTICS_HASH_SECRET: optionalString,
+    ANALYTICS_MAX_EVENTS: z.coerce.number().int().min(100).max(20_000).default(5_000),
+    ANALYTICS_RECENT_EVENTS: z.coerce.number().int().min(10).max(200).default(50),
+    GEOIP_DB_PATH: optionalString,
+    TRUST_CLOUDFLARE_HEADERS: booleanFromEnv.default(false),
   })
   .superRefine((env, context) => {
     const hasPasswordAuth = env.POCKETBASE_SUPERUSER_EMAIL && env.POCKETBASE_SUPERUSER_PASSWORD;
@@ -44,6 +49,20 @@ const schema = z
         path: ["POCKETBASE_TOKEN"],
         message:
           "Set POCKETBASE_TOKEN or both POCKETBASE_SUPERUSER_EMAIL and POCKETBASE_SUPERUSER_PASSWORD",
+      });
+    }
+    if (!env.ANALYTICS_HASH_SECRET && env.NODE_ENV === "production") {
+      context.addIssue({
+        code: "custom",
+        path: ["ANALYTICS_HASH_SECRET"],
+        message: "Set ANALYTICS_HASH_SECRET to at least 32 random characters in production",
+      });
+    }
+    if (env.ANALYTICS_HASH_SECRET && env.ANALYTICS_HASH_SECRET.length < 32) {
+      context.addIssue({
+        code: "custom",
+        path: ["ANALYTICS_HASH_SECRET"],
+        message: "ANALYTICS_HASH_SECRET must contain at least 32 characters",
       });
     }
   });
@@ -72,5 +91,13 @@ export function loadConfig(environment = process.env) {
     sessionCookieName: result.data.SESSION_COOKIE_NAME,
     sessionMaxAgeMs: result.data.SESSION_MAX_AGE_DAYS * 24 * 60 * 60 * 1_000,
     anonymousLinkTtlMs: result.data.ANONYMOUS_LINK_TTL_HOURS * 60 * 60 * 1_000,
+    analyticsHashSecret:
+      result.data.ANALYTICS_HASH_SECRET ||
+      result.data.POCKETBASE_TOKEN ||
+      result.data.POCKETBASE_SUPERUSER_PASSWORD,
+    analyticsMaxEvents: result.data.ANALYTICS_MAX_EVENTS,
+    analyticsRecentEvents: result.data.ANALYTICS_RECENT_EVENTS,
+    geoIpDatabasePath: result.data.GEOIP_DB_PATH,
+    trustCloudflareHeaders: result.data.TRUST_CLOUDFLARE_HEADERS,
   };
 }

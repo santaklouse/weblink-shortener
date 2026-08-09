@@ -12,6 +12,8 @@ A minimal Node.js URL shortener with PocketBase running behind the application.
 - Custom slugs are available only to registered users and must be unique.
 - Registered owners can enable, disable, and delete their links.
 - Clicks are incremented atomically.
+- Detailed analytics include country, referrer, masked visitor network, device, browser, operating system, and recent click time.
+- Unique visitors are counted with a keyed hash; full IP addresses are never stored.
 - PocketBase Dashboard is available on a separate administrator hostname.
 - The public hostname proxies only to Node.js. PocketBase credentials and API calls are never exposed to the browser.
 
@@ -32,6 +34,14 @@ Open `.env` and set these values before starting the stack:
 - `POCKETBASE_ADMIN_DOMAIN`: a separate PocketBase administrator hostname.
 - `PUBLIC_BASE_URL`: the complete public shortener URL including `http://` or `https://`.
 - `ADMIN_ALLOWED_IP`: the administrator's public IP address with a `/32` mask.
+- `ANALYTICS_HASH_SECRET`: a stable random secret containing at least 32 characters.
+- `TUNNEL_TOKEN`: the Cloudflare Tunnel token when the `cloudflared` service is used.
+
+Generate the analytics secret once and save the printed value in `.env`:
+
+```bash
+openssl rand -hex 32
+```
 
 The included development defaults use `localhost` and `pb.localhost`. Never leave `ADMIN_ALLOWED_IP=0.0.0.0/0` in production because it makes PocketBase Dashboard reachable from every IP address.
 
@@ -46,8 +56,9 @@ Docker Compose automatically:
 1. Builds PocketBase 0.39.9 and runs `./pocketbase serve --http=0.0.0.0:8090`.
 2. Creates or updates the PocketBase superuser.
 3. Creates the locked `users` and `short_links` collections.
-4. Starts the Node.js application.
-5. Starts Nginx after the Node.js health check succeeds.
+4. Creates the locked `click_events` analytics collection.
+5. Starts the Node.js application.
+6. Starts Nginx and Cloudflare Tunnel after the health checks succeed.
 
 With the local defaults:
 
@@ -79,6 +90,32 @@ Create `A` or `AAAA` DNS records for the public and administrator hostnames poin
 - `POCKETBASE_ADMIN_DOMAIN` routes to PocketBase and is protected by an IP allowlist.
 
 In production, terminate TLS in front of this Nginx instance using Cloudflare, an external load balancer, or another HTTPS proxy. When HTTPS is enabled, set `NODE_ENV=production` and use an `https://` value for `PUBLIC_BASE_URL`. Session cookies will then include the `Secure` flag.
+
+## Country analytics
+
+Country lookup supports two modes.
+
+### Local MaxMind database
+
+Download `GeoLite2-Country.mmdb` from MaxMind and place it at:
+
+```text
+geoip/GeoLite2-Country.mmdb
+```
+
+The Docker container mounts this directory read-only and reloads the database when it changes. This is the recommended mode when the origin accepts traffic from the public internet.
+
+### Cloudflare headers
+
+When all public traffic is guaranteed to pass through Cloudflare, enable IP Geolocation or the visitor-location Managed Transform in Cloudflare and set:
+
+```dotenv
+TRUST_CLOUDFLARE_HEADERS=true
+```
+
+This trusts `CF-IPCountry` for the country and `CF-Connecting-IP` for privacy-masked visitor analytics. Do not enable it while clients can connect directly to the origin, because direct clients could spoof these headers.
+
+Full visitor IPs are never stored. IPv4 addresses are masked to `/24`, IPv6 addresses to `/48`, and unique visitors are derived with `HMAC-SHA256` using `ANALYTICS_HASH_SECRET`. Referrer URLs may contain query parameters, so the statistics URL should be treated as a secret for anonymous links.
 
 ## Access model
 
@@ -123,12 +160,16 @@ Set either `POCKETBASE_TOKEN` or both `POCKETBASE_SUPERUSER_EMAIL` and `POCKETBA
 - `SESSION_MAX_AGE_DAYS=7`: session cookie lifetime.
 - `TRUST_PROXY=true`: trust the client IP forwarded by Nginx.
 - `NGINX_PORT=80`: published Nginx port.
+- `ANALYTICS_MAX_EVENTS=5000`: maximum events loaded for one detailed report.
+- `ANALYTICS_RECENT_EVENTS=50`: number of recent clicks returned by the API.
+- `GEOIP_DB_PATH=/geoip/GeoLite2-Country.mmdb`: local MaxMind database path.
+- `TRUST_CLOUDFLARE_HEADERS=false`: trust Cloudflare location and visitor-IP headers.
 
 ## Verification
 
 ```bash
 npm run check
-PB_SUPERUSER_EMAIL=admin@example.com PB_SUPERUSER_PASSWORD='correct-horse-battery-staple-2026' docker compose config --quiet
+docker compose config --quiet
 ```
 
 The tests cover URL validation, slug handling, and the unpredictability of statistics tokens. A public deployment should also add CAPTCHA and destination-domain moderation.

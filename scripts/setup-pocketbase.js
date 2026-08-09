@@ -1,5 +1,6 @@
 import { loadConfig } from "../src/config.js";
 import {
+  CLICK_EVENTS_COLLECTION,
   LINKS_COLLECTION,
   USERS_COLLECTION,
   authenticatePocketBase,
@@ -118,10 +119,10 @@ async function ensureLinksCollection(usersCollection) {
     } else {
       console.log(`Collection ${LINKS_COLLECTION} already exists; no changes required.`);
     }
-    return;
+    return findCollection(LINKS_COLLECTION);
   }
 
-  await client.collections.create({
+  const created = await client.collections.create({
     name: LINKS_COLLECTION,
     type: "base",
     listRule: null,
@@ -206,12 +207,130 @@ async function ensureLinksCollection(usersCollection) {
   });
 
   console.log(`Collection ${LINKS_COLLECTION} created.`);
+  return created;
+}
+
+async function ensureClickEventsCollection(linksCollection) {
+  const existing = await findCollection(CLICK_EVENTS_COLLECTION);
+  if (existing) {
+    console.log(`Collection ${CLICK_EVENTS_COLLECTION} already exists; no changes required.`);
+    return existing;
+  }
+
+  const created = await client.collections.create({
+    name: CLICK_EVENTS_COLLECTION,
+    type: "base",
+    listRule: null,
+    viewRule: null,
+    createRule: null,
+    updateRule: null,
+    deleteRule: null,
+    fields: [
+      {
+        name: "link",
+        type: "relation",
+        required: true,
+        presentable: false,
+        collectionId: linksCollection.id,
+        cascadeDelete: true,
+        minSelect: 1,
+        maxSelect: 1,
+      },
+      {
+        name: "countryCode",
+        type: "text",
+        required: true,
+        min: 2,
+        max: 2,
+        pattern: "^[A-Z0-9]{2}$",
+        autogeneratePattern: "",
+      },
+      {
+        name: "referrer",
+        type: "url",
+        required: false,
+        presentable: true,
+        onlyDomains: null,
+        exceptDomains: null,
+      },
+      {
+        name: "referrerHost",
+        type: "text",
+        required: false,
+        min: 0,
+        max: 255,
+        pattern: "",
+        autogeneratePattern: "",
+      },
+      {
+        name: "ipAddress",
+        type: "text",
+        required: false,
+        hidden: true,
+        min: 0,
+        max: 64,
+        pattern: "",
+        autogeneratePattern: "",
+      },
+      {
+        name: "visitorHash",
+        type: "text",
+        required: false,
+        hidden: true,
+        min: 0,
+        max: 64,
+        pattern: "^[a-f0-9]*$",
+        autogeneratePattern: "",
+      },
+      {
+        name: "device",
+        type: "text",
+        required: false,
+        min: 0,
+        max: 32,
+        pattern: "",
+        autogeneratePattern: "",
+      },
+      {
+        name: "browser",
+        type: "text",
+        required: false,
+        min: 0,
+        max: 64,
+        pattern: "",
+        autogeneratePattern: "",
+      },
+      {
+        name: "os",
+        type: "text",
+        required: false,
+        min: 0,
+        max: 64,
+        pattern: "",
+        autogeneratePattern: "",
+      },
+      {
+        name: "created",
+        type: "autodate",
+        onCreate: true,
+        onUpdate: false,
+      },
+    ],
+    indexes: [
+      "CREATE INDEX `idx_click_events_link_created` ON `click_events` (`link`, `created`)",
+      "CREATE INDEX `idx_click_events_visitor_hash` ON `click_events` (`visitorHash`)",
+    ],
+  });
+
+  console.log(`Collection ${CLICK_EVENTS_COLLECTION} created.`);
+  return created;
 }
 
 async function main() {
   await authenticatePocketBase(client, config);
   const usersCollection = await ensureUsersCollection();
-  await ensureLinksCollection(usersCollection);
+  const linksCollection = await ensureLinksCollection(usersCollection);
+  await ensureClickEventsCollection(linksCollection);
 }
 
 main().catch((error) => {

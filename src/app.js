@@ -4,6 +4,7 @@ import cookieParser from "cookie-parser";
 import express from "express";
 import { rateLimit } from "express-rate-limit";
 import helmet from "helmet";
+import { buildAnalytics, captureClickDetails } from "./analytics.js";
 import { normalizeLogin, normalizeRegistration, publicUser } from "./auth.js";
 import {
   generateSlug,
@@ -14,7 +15,12 @@ import {
   normalizeAlias,
   normalizeTargetUrl,
 } from "./links.js";
-import { createUserClient, LINKS_COLLECTION, USERS_COLLECTION } from "./pocketbase.js";
+import {
+  CLICK_EVENTS_COLLECTION,
+  createUserClient,
+  LINKS_COLLECTION,
+  USERS_COLLECTION,
+} from "./pocketbase.js";
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const publicDirectory = path.resolve(currentDirectory, "../public");
@@ -87,7 +93,7 @@ async function createRecord(client, url, requestedSlug, ownerId, anonymousLinkTt
   throw new Error("Could not generate an available short URL");
 }
 
-export function createApp({ client, config, logger = console }) {
+export function createApp({ client, config, geoIpResolver, logger = console }) {
   const app = express();
 
   app.disable("x-powered-by");
@@ -329,8 +335,20 @@ export function createApp({ client, config, logger = console }) {
     try {
       const filter = client.filter("statsToken = {:token}", { token: request.params.token });
       const record = await client.collection(LINKS_COLLECTION).getFirstListItem(filter, {
-        fields: "slug,url,clicks,active,created,expiresAt",
+        fields: "id,slug,url,clicks,active,created,expiresAt",
       });
+      const eventsFilter = client.filter("link = {:link}", { link: record.id });
+      const eventsPage = await client.collection(CLICK_EVENTS_COLLECTION).getList(
+        1,
+        config.analyticsMaxEvents,
+        {
+          filter: eventsFilter,
+          sort: "-created",
+          skipTotal: true,
+          fields:
+            "countryCode,referrer,referrerHost,ipAddress,visitorHash,device,browser,os,created",
+        },
+      );
       const baseUrl = getPublicBaseUrl(request, config.publicBaseUrl);
       const expired = Boolean(record.expiresAt && new Date(record.expiresAt) <= new Date());
       return response.json({
@@ -343,6 +361,11 @@ export function createApp({ client, config, logger = console }) {
           expiresAt: record.expiresAt || null,
           expired,
         },
+        analytics: buildAnalytics(
+          eventsPage.items,
+          record.clicks,
+          config.analyticsRecentEvents,
+        ),
       });
     } catch (error) {
       if (error?.status === 404) return clientError(response, "Statistics not found", 404);
@@ -364,10 +387,16 @@ export function createApp({ client, config, logger = console }) {
 
       if (record.expiresAt && new Date(record.expiresAt) <= new Date()) return next();
 
-      try {
-        await client.collection(LINKS_COLLECTION).update(record.id, { "clicks+": 1 });
-      } catch (error) {
-        logger.error("Failed to increment the click counter", error);
+      const clickDetails = await captureClickDetails(request, config, geoIpResolver);
+      const writes = await Promise.allSettled([
+        client.collection(LINKS_COLLECTION).update(record.id, { "clicks+": 1 }),
+        client.collection(CLICK_EVENTS_COLLECTION).create({
+          link: record.id,
+          ...clickDetails,
+        }),
+      ]);
+      for (const write of writes) {
+        if (write.status === "rejected") logger.error("Failed to record click analytics", write.reason);
       }
 
       return response.redirect(302, record.url);

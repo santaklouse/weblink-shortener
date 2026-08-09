@@ -54,6 +54,11 @@ services:
       SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-weblink_session}
       SESSION_MAX_AGE_DAYS: ${SESSION_MAX_AGE_DAYS:-7}
       ANONYMOUS_LINK_TTL_HOURS: ${ANONYMOUS_LINK_TTL_HOURS:-24}
+      ANALYTICS_HASH_SECRET: ${ANALYTICS_HASH_SECRET:?Set ANALYTICS_HASH_SECRET in .env}
+      ANALYTICS_MAX_EVENTS: ${ANALYTICS_MAX_EVENTS:-5000}
+      ANALYTICS_RECENT_EVENTS: ${ANALYTICS_RECENT_EVENTS:-50}
+      GEOIP_DB_PATH: ${GEOIP_DB_PATH:-/geoip/GeoLite2-Country.mmdb}
+      TRUST_CLOUDFLARE_HEADERS: ${TRUST_CLOUDFLARE_HEADERS:-false}
     depends_on:
       setup:
         condition: service_completed_successfully
@@ -64,6 +69,8 @@ services:
       retries: 10
       start_period: 5s
     read_only: true
+    volumes:
+      - ./geoip:/geoip:ro
     tmpfs:
       - /tmp
 
@@ -89,9 +96,9 @@ services:
   cloudflared:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
-    command: 'tunnel --no-autoupdate run'
+    command: tunnel --no-autoupdate run
     environment:
-      TUNNEL_TOKEN: "eyJhIjoiOTNhMGRjOTFjMTg3YzRiMDFlZDhmOWY0NTBmY2I3MGYiLCJ0IjoiMjU0N2YxM2QtZTY0Ny00NDUxLThkMWQtMTMwMTRiZDk3NDE1IiwicyI6Ik0yTmxaVEprTm1JdE0yTTRPUzAwTVdNeUxUaGpNV0V0TXpNMFpUSm1aV1V4T0RCayJ9"
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?Set TUNNEL_TOKEN in .env}
     depends_on:
       pocketbase:
         condition: service_healthy
