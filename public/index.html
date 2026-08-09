@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="A simple URL shortener with click statistics" />
     <title>Short URL</title>
-    <link rel="stylesheet" href="/styles.css?v=5" />
-    <script src="/app.js?v=4" defer></script>
+    <link rel="stylesheet" href="/styles.css?v=6" />
+    <script src="/app.js?v=5" defer></script>
   </head>
   <body>
     <main class="shell">
@@ -52,6 +52,12 @@
 
         <section id="auth-card" class="card compact" aria-labelledby="auth-title">
           <h2 id="auth-title">Sign in or create an account</h2>
+          <a id="google-sign-in" class="oauth-button" href="/api/auth/google/start" hidden>
+            <span class="google-mark" aria-hidden="true">G</span>
+            Continue with Google
+          </a>
+          <div id="auth-divider" class="auth-divider" hidden><span>or use email</span></div>
+          <p id="auth-message" class="message" role="status" aria-live="polite"></p>
           <div class="auth-grid">
             <form id="login-form">
               <h3>Sign in</h3>

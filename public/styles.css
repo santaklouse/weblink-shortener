@@ -108,6 +108,56 @@ form {
   gap: 30px;
 }
 
+.oauth-button {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 18px;
+  border: 1px solid #cbd5da;
+  border-radius: 12px;
+  background: #fff;
+  color: #263746;
+  font-weight: 750;
+  text-decoration: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.oauth-button:hover {
+  border-color: #9cabb3;
+  box-shadow: 0 5px 18px rgba(30, 56, 66, 0.09);
+  transform: translateY(-1px);
+}
+
+.google-mark {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid #d8e0e4;
+  border-radius: 50%;
+  color: #4285f4;
+  font-weight: 850;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 24px 0;
+  color: #7c8992;
+  font-size: 0.82rem;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  height: 1px;
+  flex: 1;
+  background: #e2e8eb;
+  content: "";
+}
+
 h2,
 h3 {
   margin-top: 0;

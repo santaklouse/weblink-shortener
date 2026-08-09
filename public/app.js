@@ -12,6 +12,9 @@ const userSummary = document.querySelector("#user-summary");
 const userEmail = document.querySelector("#user-email");
 const linksBody = document.querySelector("#links-body");
 const linksMessage = document.querySelector("#links-message");
+const googleSignIn = document.querySelector("#google-sign-in");
+const authDivider = document.querySelector("#auth-divider");
+const authMessage = document.querySelector("#auth-message");
 let currentUser = null;
 
 document.querySelector("#domain-prefix").textContent = `${window.location.host}/`;
@@ -47,12 +50,42 @@ async function loadSession() {
   renderSession();
 }
 
+async function loadAuthProviders() {
+  try {
+    const providers = await api("/api/auth/providers");
+    googleSignIn.hidden = !providers.google;
+    authDivider.hidden = !providers.google;
+  } catch {
+    googleSignIn.hidden = true;
+    authDivider.hidden = true;
+  }
+}
+
+function showAuthenticationResult() {
+  const url = new URL(window.location.href);
+  const status = url.searchParams.get("auth");
+  if (!status) return;
+
+  if (status === "google-success") {
+    formMessage.textContent = "Signed in with Google.";
+  } else if (status === "cancelled") {
+    authMessage.textContent = "Google sign-in was cancelled.";
+  } else if (status === "google-failed") {
+    authMessage.textContent = "Google sign-in failed. Please try again.";
+    authMessage.classList.add("error");
+  }
+
+  url.searchParams.delete("auth");
+  window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
 function bindAuthForm(selector, endpoint) {
   const form = document.querySelector(selector);
   const message = form.querySelector(".message");
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     message.textContent = "";
+    message.classList.remove("error");
     const button = form.querySelector("button");
     button.disabled = true;
     try {
@@ -203,4 +236,6 @@ document.querySelector("#logout-button").addEventListener("click", async () => {
 });
 
 document.querySelector("#refresh-button").addEventListener("click", loadLinks);
+showAuthenticationResult();
+loadAuthProviders();
 loadSession();

@@ -10,6 +10,28 @@ import {
 const config = loadConfig();
 const client = createPocketBaseClient(config);
 
+function googleOAuthOptions(existing = {}) {
+  if (!config.googleClientId || !config.googleClientSecret) return null;
+
+  const providers = (existing.providers || []).filter((provider) => provider.name !== "google");
+  providers.push({
+    name: "google",
+    clientId: config.googleClientId,
+    clientSecret: config.googleClientSecret,
+  });
+
+  return {
+    enabled: true,
+    mappedFields: {
+      id: existing.mappedFields?.id || "",
+      name: "name",
+      username: existing.mappedFields?.username || "",
+      avatarURL: existing.mappedFields?.avatarURL || "",
+    },
+    providers,
+  };
+}
+
 async function findCollection(name) {
   try {
     return await client.collections.getOne(name);
@@ -21,7 +43,16 @@ async function findCollection(name) {
 
 async function ensureUsersCollection() {
   const existing = await findCollection(USERS_COLLECTION);
-  if (existing) return existing;
+  if (existing) {
+    const oauth2 = googleOAuthOptions(existing.oauth2);
+    if (!oauth2) return existing;
+
+    const updated = await client.collections.update(existing.id, { oauth2 });
+    console.log(`Google OAuth configured for ${USERS_COLLECTION}.`);
+    return updated;
+  }
+
+  const oauth2 = googleOAuthOptions();
 
   const created = await client.collections.create({
     name: USERS_COLLECTION,
@@ -47,6 +78,7 @@ async function ensureUsersCollection() {
       enabled: true,
       identityFields: ["email"],
     },
+    ...(oauth2 ? { oauth2 } : {}),
   });
   console.log(`Auth collection ${USERS_COLLECTION} created.`);
   return created;

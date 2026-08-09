@@ -31,6 +31,8 @@ services:
       POCKETBASE_URL: http://pocketbase:8090
       POCKETBASE_SUPERUSER_EMAIL: ${PB_SUPERUSER_EMAIL:?Set PB_SUPERUSER_EMAIL in .env}
       POCKETBASE_SUPERUSER_PASSWORD: ${PB_SUPERUSER_PASSWORD:?Set PB_SUPERUSER_PASSWORD in .env}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
     command: ["node", "scripts/setup-pocketbase.js"]
     depends_on:
       pocketbase:

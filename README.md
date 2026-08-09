@@ -8,6 +8,7 @@ A minimal Node.js URL shortener with PocketBase running behind the application.
 - Guest links expire after 24 hours by default.
 - Each guest link includes an unguessable statistics page URL.
 - Registration and sign-in use an `HttpOnly` session cookie.
+- Users can sign in or create an account with Google OAuth 2.0.
 - Registered users receive permanent links and a dashboard with click statistics.
 - Custom slugs are available only to registered users and must be unique.
 - Registered owners can enable, disable, and delete their links.
@@ -36,6 +37,7 @@ Open `.env` and set these values before starting the stack:
 - `ADMIN_ALLOWED_IP`: the administrator's public IP address with a `/32` mask.
 - `ANALYTICS_HASH_SECRET`: a stable random secret containing at least 32 characters.
 - `TUNNEL_TOKEN`: the Cloudflare Tunnel token when the `cloudflared` service is used.
+- `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`: Google OAuth 2.0 web application credentials.
 
 Generate the analytics secret once and save the printed value in `.env`:
 
@@ -66,6 +68,28 @@ With the local defaults:
 - PocketBase Dashboard: [http://pb.localhost/_/](http://pb.localhost/_/)
 
 Sign in to PocketBase Dashboard with `PB_SUPERUSER_EMAIL` and `PB_SUPERUSER_PASSWORD` from `.env`.
+
+## Google sign-in
+
+Create an OAuth 2.0 client in Google Cloud Console with the application type **Web application**. Its authorized redirect URI must be the exact `PUBLIC_BASE_URL` value followed by `/api/auth/google-callback`.
+
+For local development with the default Node.js port, use:
+
+```text
+http://localhost:3000/api/auth/google-callback
+```
+
+The scheme, hostname, port, path, and trailing slash must exactly match the public URL used by the application. Production Google OAuth redirect URIs must use HTTPS. Because this application runs on a URL-shortener domain, keep the callback path ending in `/google-callback`.
+
+Paste the generated client ID and client secret into the existing `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` entries in `.env`.
+
+Apply the collection configuration and restart the application:
+
+```bash
+docker compose up -d --build setup app nginx
+```
+
+The setup container enables Google OAuth for the PocketBase `users` collection and maps the Google profile name to the existing `name` field. The browser starts and completes authentication only through Node.js routes; the PocketBase URL, OAuth code verifier, PocketBase auth token, and Google client secret remain server-side.
 
 Check the stack:
 
@@ -125,6 +149,9 @@ PocketBase collection API rules are locked. The browser calls only these Node.js
 - `GET /api/stats/:token`: view statistics using the secret token.
 - `POST /api/auth/register`: create an account.
 - `POST /api/auth/login`: sign in.
+- `GET /api/auth/providers`: return enabled public sign-in choices.
+- `GET /api/auth/google/start`: start Google authentication.
+- `GET /api/auth/google-callback`: validate and complete Google authentication.
 - `POST /api/auth/logout`: sign out.
 - `GET /api/auth/me`: return the current user.
 - `GET /api/links`: list the signed-in user's links.

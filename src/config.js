@@ -40,6 +40,8 @@ const schema = z
     ANALYTICS_RECENT_EVENTS: z.coerce.number().int().min(10).max(200).default(50),
     GEOIP_DB_PATH: optionalString,
     TRUST_CLOUDFLARE_HEADERS: booleanFromEnv.default(false),
+    GOOGLE_CLIENT_ID: optionalString,
+    GOOGLE_CLIENT_SECRET: optionalString,
   })
   .superRefine((env, context) => {
     const hasPasswordAuth = env.POCKETBASE_SUPERUSER_EMAIL && env.POCKETBASE_SUPERUSER_PASSWORD;
@@ -63,6 +65,13 @@ const schema = z
         code: "custom",
         path: ["ANALYTICS_HASH_SECRET"],
         message: "ANALYTICS_HASH_SECRET must contain at least 32 characters",
+      });
+    }
+    if (Boolean(env.GOOGLE_CLIENT_ID) !== Boolean(env.GOOGLE_CLIENT_SECRET)) {
+      context.addIssue({
+        code: "custom",
+        path: ["GOOGLE_CLIENT_ID"],
+        message: "Set both GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, or leave both empty",
       });
     }
   });
@@ -99,5 +108,7 @@ export function loadConfig(environment = process.env) {
     analyticsRecentEvents: result.data.ANALYTICS_RECENT_EVENTS,
     geoIpDatabasePath: result.data.GEOIP_DB_PATH,
     trustCloudflareHeaders: result.data.TRUST_CLOUDFLARE_HEADERS,
+    googleClientId: result.data.GOOGLE_CLIENT_ID,
+    googleClientSecret: result.data.GOOGLE_CLIENT_SECRET,
   };
 }

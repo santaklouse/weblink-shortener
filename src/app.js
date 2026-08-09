@@ -16,6 +16,12 @@ import {
   normalizeTargetUrl,
 } from "./links.js";
 import {
+  buildOAuthAuthorizationUrl,
+  createOAuthStateToken,
+  OAUTH_STATE_TTL_MS,
+  verifyOAuthStateToken,
+} from "./oauth.js";
+import {
   CLICK_EVENTS_COLLECTION,
   createUserClient,
   LINKS_COLLECTION,
@@ -49,6 +55,29 @@ function clearSession(response, config) {
     sameSite: "lax",
     secure: config.nodeEnv === "production",
     path: "/",
+  });
+}
+
+function googleOAuthCookieName(config) {
+  return `${config.sessionCookieName}_google_oauth`;
+}
+
+function googleOAuthCookieOptions(config) {
+  return {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: config.nodeEnv === "production",
+    maxAge: OAUTH_STATE_TTL_MS,
+    path: "/api/auth",
+  };
+}
+
+function clearGoogleOAuthState(response, config) {
+  response.clearCookie(googleOAuthCookieName(config), {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: config.nodeEnv === "production",
+    path: "/api/auth",
   });
 }
 
@@ -93,7 +122,13 @@ async function createRecord(client, url, requestedSlug, ownerId, anonymousLinkTt
   throw new Error("Could not generate an available short URL");
 }
 
-export function createApp({ client, config, geoIpResolver, logger = console }) {
+export function createApp({
+  client,
+  config,
+  geoIpResolver,
+  logger = console,
+  userClientFactory = (token) => createUserClient(config, token),
+}) {
   const app = express();
 
   app.disable("x-powered-by");
@@ -133,7 +168,7 @@ export function createApp({ client, config, geoIpResolver, logger = console }) {
     }
 
     try {
-      const userClient = createUserClient(config, token);
+      const userClient = userClientFactory(token);
       const auth = await userClient.collection(USERS_COLLECTION).authRefresh();
       request.user = auth.record;
       setSession(response, config, auth.token);
@@ -175,7 +210,7 @@ export function createApp({ client, config, geoIpResolver, logger = console }) {
         name: registration.name,
       });
 
-      const userClient = createUserClient(config);
+      const userClient = userClientFactory();
       const auth = await userClient
         .collection(USERS_COLLECTION)
         .authWithPassword(registration.email, registration.password);
@@ -198,7 +233,7 @@ export function createApp({ client, config, geoIpResolver, logger = console }) {
     }
 
     try {
-      const userClient = createUserClient(config);
+      const userClient = userClientFactory();
       const auth = await userClient
         .collection(USERS_COLLECTION)
         .authWithPassword(credentials.email, credentials.password);
@@ -206,6 +241,79 @@ export function createApp({ client, config, geoIpResolver, logger = console }) {
       return response.json({ user: publicUser(auth.record) });
     } catch {
       return clientError(response, "Incorrect email or password", 401);
+    }
+  });
+
+  const getGoogleProvider = async () => {
+    const userClient = userClientFactory();
+    const methods = await userClient.collection(USERS_COLLECTION).listAuthMethods();
+    return methods.oauth2?.providers?.find((provider) => provider.name === "google") || null;
+  };
+
+  app.get("/api/auth/providers", apiLimiter, async (_request, response, next) => {
+    try {
+      const google = await getGoogleProvider();
+      response.json({ google: Boolean(google) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/auth/google/start", apiLimiter, async (request, response, next) => {
+    try {
+      const provider = await getGoogleProvider();
+      if (!provider) return clientError(response, "Google sign-in is not configured", 503);
+
+      const baseUrl = getPublicBaseUrl(request, config.publicBaseUrl);
+      const redirectUrl = `${baseUrl}/api/auth/google-callback`;
+      const stateToken = createOAuthStateToken(
+        provider,
+        redirectUrl,
+        config.analyticsHashSecret,
+      );
+
+      response.cookie(
+        googleOAuthCookieName(config),
+        stateToken,
+        googleOAuthCookieOptions(config),
+      );
+      return response.redirect(302, buildOAuthAuthorizationUrl(provider.authURL, redirectUrl));
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  app.get("/api/auth/google-callback", apiLimiter, async (request, response) => {
+    const returnToHome = (status) => response.redirect(303, `/?auth=${status}`);
+    const stateCookie = request.cookies[googleOAuthCookieName(config)];
+    clearGoogleOAuthState(response, config);
+
+    if (request.query.error) return returnToHome("cancelled");
+
+    try {
+      const state = typeof request.query.state === "string" ? request.query.state : "";
+      const code = typeof request.query.code === "string" ? request.query.code : "";
+      const oauthState = verifyOAuthStateToken(
+        stateCookie,
+        config.analyticsHashSecret,
+      );
+
+      if (!state || state !== oauthState.state || !code) {
+        throw new Error("OAuth state or authorization code is invalid");
+      }
+
+      const userClient = userClientFactory();
+      const auth = await userClient.collection(USERS_COLLECTION).authWithOAuth2Code(
+        "google",
+        code,
+        oauthState.codeVerifier,
+        oauthState.redirectUrl,
+      );
+      setSession(response, config, auth.token);
+      return returnToHome("google-success");
+    } catch (error) {
+      logger.warn("Google authentication failed", error?.message || error);
+      return returnToHome("google-failed");
     }
   });
 
