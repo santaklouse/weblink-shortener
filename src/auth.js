@@ -14,6 +14,25 @@ export function normalizeLogin(body) {
   };
 }
 
+export function normalizePasswordResetRequest(body) {
+  return { email: normalizeEmail(body?.email) };
+}
+
+export function normalizePasswordResetConfirmation(body) {
+  if (
+    typeof body?.token !== "string" ||
+    body.token.length < 20 ||
+    body.token.length > 2_048 ||
+    !/^[A-Za-z0-9._-]+$/.test(body.token)
+  ) {
+    throw new Error("This password reset link is invalid or has expired");
+  }
+
+  const password = normalizePassword(body?.password);
+  if (password !== body?.passwordConfirm) throw new Error("Passwords do not match");
+  return { token: body.token, password };
+}
+
 function normalizeEmail(value) {
   if (typeof value !== "string") throw new Error("Enter your email address");
   const email = value.trim().toLowerCase();

@@ -10,6 +10,15 @@ import {
 const config = loadConfig();
 const client = createPocketBaseClient(config);
 
+const resetPasswordTemplate = {
+  subject: "Reset your {APP_NAME} password",
+  body: `<p>Hello,</p>
+<p>Click the button below to choose a new password.</p>
+<p><a class="btn" href="{APP_URL}/reset-password?token={TOKEN}" target="_blank" rel="noopener">Reset password</a></p>
+<p><i>If you did not request a password reset, you can ignore this email.</i></p>
+<p>Thanks,<br>{APP_NAME} team</p>`,
+};
+
 function googleOAuthOptions(existing = {}) {
   if (!config.googleClientId || !config.googleClientSecret) return null;
 
@@ -45,10 +54,11 @@ async function ensureUsersCollection() {
   const existing = await findCollection(USERS_COLLECTION);
   if (existing) {
     const oauth2 = googleOAuthOptions(existing.oauth2);
-    if (!oauth2) return existing;
+    const updates = { resetPasswordTemplate };
+    if (oauth2) updates.oauth2 = oauth2;
 
-    const updated = await client.collections.update(existing.id, { oauth2 });
-    console.log(`Google OAuth configured for ${USERS_COLLECTION}.`);
+    const updated = await client.collections.update(existing.id, updates);
+    console.log(`Authentication options configured for ${USERS_COLLECTION}.`);
     return updated;
   }
 
@@ -78,10 +88,40 @@ async function ensureUsersCollection() {
       enabled: true,
       identityFields: ["email"],
     },
+    resetPasswordTemplate,
     ...(oauth2 ? { oauth2 } : {}),
   });
   console.log(`Auth collection ${USERS_COLLECTION} created.`);
   return created;
+}
+
+async function ensureApplicationSettings() {
+  const settings = await client.settings.getAll();
+  const update = {
+    meta: {
+      ...settings.meta,
+      appName: "Weblink Shortener",
+      appURL: config.publicBaseUrl || settings.meta.appURL,
+      senderName: config.mailFromName || settings.meta.senderName,
+      senderAddress: config.mailFromAddress || settings.meta.senderAddress,
+    },
+  };
+
+  if (config.smtpHost) {
+    update.smtp = {
+      enabled: true,
+      host: config.smtpHost,
+      port: config.smtpPort,
+      username: config.smtpUsername || "",
+      password: config.smtpPassword || "",
+      tls: config.smtpTls,
+      authMethod: config.smtpAuthMethod || "",
+      localName: config.smtpLocalName || "",
+    };
+  }
+
+  await client.settings.update(update);
+  console.log(config.smtpHost ? "Application mail settings configured." : "Application URL configured; existing mail settings preserved.");
 }
 
 async function ensureLinksCollection(usersCollection) {
@@ -360,6 +400,7 @@ async function ensureClickEventsCollection(linksCollection) {
 
 async function main() {
   await authenticatePocketBase(client, config);
+  await ensureApplicationSettings();
   const usersCollection = await ensureUsersCollection();
   const linksCollection = await ensureLinksCollection(usersCollection);
   await ensureClickEventsCollection(linksCollection);

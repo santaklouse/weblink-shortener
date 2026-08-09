@@ -28,11 +28,21 @@ services:
       context: .
     environment:
       NODE_ENV: development
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost}
       POCKETBASE_URL: http://pocketbase:8090
       POCKETBASE_SUPERUSER_EMAIL: ${PB_SUPERUSER_EMAIL:?Set PB_SUPERUSER_EMAIL in .env}
       POCKETBASE_SUPERUSER_PASSWORD: ${PB_SUPERUSER_PASSWORD:?Set PB_SUPERUSER_PASSWORD in .env}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_TLS: ${SMTP_TLS:-false}
+      SMTP_AUTH_METHOD: ${SMTP_AUTH_METHOD:-PLAIN}
+      SMTP_LOCAL_NAME: ${SMTP_LOCAL_NAME:-}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Weblink Shortener}
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-}
     command: ["node", "scripts/setup-pocketbase.js"]
     depends_on:
       pocketbase:

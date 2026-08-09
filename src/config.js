@@ -42,6 +42,15 @@ const schema = z
     TRUST_CLOUDFLARE_HEADERS: booleanFromEnv.default(false),
     GOOGLE_CLIENT_ID: optionalString,
     GOOGLE_CLIENT_SECRET: optionalString,
+    SMTP_HOST: optionalString,
+    SMTP_PORT: z.coerce.number().int().min(1).max(65_535).default(587),
+    SMTP_USERNAME: optionalString,
+    SMTP_PASSWORD: optionalString,
+    SMTP_TLS: booleanFromEnv.default(false),
+    SMTP_AUTH_METHOD: z.enum(["PLAIN", "LOGIN"]).optional(),
+    SMTP_LOCAL_NAME: optionalString,
+    MAIL_FROM_NAME: z.string().trim().min(1).max(255).default("Weblink Shortener"),
+    MAIL_FROM_ADDRESS: optionalString,
   })
   .superRefine((env, context) => {
     const hasPasswordAuth = env.POCKETBASE_SUPERUSER_EMAIL && env.POCKETBASE_SUPERUSER_PASSWORD;
@@ -72,6 +81,27 @@ const schema = z
         code: "custom",
         path: ["GOOGLE_CLIENT_ID"],
         message: "Set both GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, or leave both empty",
+      });
+    }
+    if (env.SMTP_HOST && !env.MAIL_FROM_ADDRESS) {
+      context.addIssue({
+        code: "custom",
+        path: ["MAIL_FROM_ADDRESS"],
+        message: "Set MAIL_FROM_ADDRESS when SMTP_HOST is configured",
+      });
+    }
+    if (Boolean(env.SMTP_USERNAME) !== Boolean(env.SMTP_PASSWORD)) {
+      context.addIssue({
+        code: "custom",
+        path: ["SMTP_USERNAME"],
+        message: "Set both SMTP_USERNAME and SMTP_PASSWORD, or leave both empty",
+      });
+    }
+    if (env.MAIL_FROM_ADDRESS && !z.email().safeParse(env.MAIL_FROM_ADDRESS).success) {
+      context.addIssue({
+        code: "custom",
+        path: ["MAIL_FROM_ADDRESS"],
+        message: "Enter a valid sender email address",
       });
     }
   });
@@ -110,5 +140,14 @@ export function loadConfig(environment = process.env) {
     trustCloudflareHeaders: result.data.TRUST_CLOUDFLARE_HEADERS,
     googleClientId: result.data.GOOGLE_CLIENT_ID,
     googleClientSecret: result.data.GOOGLE_CLIENT_SECRET,
+    smtpHost: result.data.SMTP_HOST,
+    smtpPort: result.data.SMTP_PORT,
+    smtpUsername: result.data.SMTP_USERNAME,
+    smtpPassword: result.data.SMTP_PASSWORD,
+    smtpTls: result.data.SMTP_TLS,
+    smtpAuthMethod: result.data.SMTP_AUTH_METHOD,
+    smtpLocalName: result.data.SMTP_LOCAL_NAME,
+    mailFromName: result.data.MAIL_FROM_NAME,
+    mailFromAddress: result.data.MAIL_FROM_ADDRESS,
   };
 }

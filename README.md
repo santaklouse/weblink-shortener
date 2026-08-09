@@ -8,6 +8,7 @@ A minimal Node.js URL shortener with PocketBase running behind the application.
 - Guest links expire after 24 hours by default.
 - Each guest link includes an unguessable statistics page URL.
 - Registration and sign-in use an `HttpOnly` session cookie.
+- Email accounts can securely request and confirm password resets.
 - Users can sign in or create an account with Google OAuth 2.0.
 - Registered users receive permanent links and a dashboard with click statistics.
 - Custom slugs are available only to registered users and must be unique.
@@ -39,6 +40,8 @@ Open `.env` and set these values before starting the stack:
 - `ANALYTICS_HASH_SECRET`: a stable random secret containing at least 32 characters.
 - `TUNNEL_TOKEN`: the Cloudflare Tunnel token when the `cloudflared` service is used.
 - `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`: Google OAuth 2.0 web application credentials.
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, and `SMTP_PASSWORD`: the transactional email server used for password reset messages.
+- `MAIL_FROM_ADDRESS`: a verified sender address accepted by the SMTP provider.
 
 Generate the analytics secret once and save the printed value in `.env`:
 
@@ -91,6 +94,20 @@ docker compose up -d --build setup app nginx
 ```
 
 The setup container enables Google OAuth for the PocketBase `users` collection and maps the Google profile name to the existing `name` field. The browser starts and completes authentication only through Node.js routes; the PocketBase URL, OAuth code verifier, PocketBase auth token, and Google client secret remain server-side.
+
+## Password reset email
+
+Password reset requests are handled by Node.js and delivered by PocketBase. Configure the SMTP and sender entries already present in `.env` before using the flow in production. Use `SMTP_TLS=false` for a STARTTLS connection such as port 587, or `SMTP_TLS=true` when the SMTP provider requires an implicit TLS connection such as port 465.
+
+`PUBLIC_BASE_URL` must be the public HTTPS origin of the shortener. The setup container uses that origin for links to `/reset-password`; PocketBase adds a single-use reset token to each message.
+
+Apply the mail configuration and restart the application:
+
+```bash
+docker compose up -d --build setup app nginx
+```
+
+You can send a password-reset test email from PocketBase Dashboard under **Settings → Mail settings**. The SMTP password is passed only to the setup container and stored by PocketBase; it is never exposed to the browser or Node.js application container.
 
 Check the stack:
 
@@ -150,6 +167,8 @@ PocketBase collection API rules are locked. The browser calls only these Node.js
 - `GET /api/stats/:token`: view statistics using the secret token.
 - `POST /api/auth/register`: create an account.
 - `POST /api/auth/login`: sign in.
+- `POST /api/auth/forgot-password`: request a password reset email.
+- `POST /api/auth/reset-password`: set a new password with a valid reset token.
 - `GET /api/auth/providers`: return enabled public sign-in choices.
 - `GET /api/auth/google/start`: start Google authentication.
 - `GET /api/auth/google-callback`: validate and complete Google authentication.

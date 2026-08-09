@@ -108,6 +108,49 @@ form {
   gap: 30px;
 }
 
+.forgot-password-link {
+  justify-self: start;
+  margin-top: -3px;
+  color: #13755f;
+  font-size: 0.86rem;
+}
+
+.auth-page {
+  max-width: 540px;
+}
+
+.auth-page h1 {
+  font-size: clamp(2.1rem, 8vw, 3.4rem);
+}
+
+.auth-page .intro {
+  margin-bottom: 26px;
+}
+
+.auth-success {
+  margin: 18px 0;
+  padding: 18px;
+  border: 1px solid #badfd6;
+  border-radius: 14px;
+  background: #effaf7;
+}
+
+.auth-success h2,
+.auth-success p {
+  margin: 0;
+}
+
+.auth-success p {
+  margin-top: 8px;
+  color: #35645a;
+  line-height: 1.5;
+}
+
+.auth-back-link {
+  display: inline-block;
+  margin-top: 22px;
+}
+
 .oauth-button {
   display: flex;
   min-height: 52px;

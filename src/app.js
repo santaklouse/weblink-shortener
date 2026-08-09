@@ -5,7 +5,13 @@ import express from "express";
 import { rateLimit } from "express-rate-limit";
 import helmet from "helmet";
 import { buildAnalytics, captureClickDetails } from "./analytics.js";
-import { normalizeLogin, normalizeRegistration, publicUser } from "./auth.js";
+import {
+  normalizeLogin,
+  normalizePasswordResetConfirmation,
+  normalizePasswordResetRequest,
+  normalizeRegistration,
+  publicUser,
+} from "./auth.js";
 import {
   generateSlug,
   generateStatsToken,
@@ -158,6 +164,14 @@ export function createApp({
     standardHeaders: "draft-8",
     legacyHeaders: false,
     message: { error: "Too many requests. Please try again in a few minutes." },
+  });
+
+  const passwordResetLimiter = rateLimit({
+    windowMs: 15 * 60 * 1_000,
+    limit: 5,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    message: { error: "Too many password reset requests. Please try again later." },
   });
 
   const resolveUser = async (request, response, next, required) => {
@@ -316,6 +330,59 @@ export function createApp({
       return returnToHome("google-failed");
     }
   });
+
+  app.post(
+    "/api/auth/forgot-password",
+    passwordResetLimiter,
+    async (request, response) => {
+      let resetRequest;
+      try {
+        resetRequest = normalizePasswordResetRequest(request.body);
+      } catch (error) {
+        return clientError(response, error.message);
+      }
+
+      try {
+        const userClient = userClientFactory();
+        await userClient
+          .collection(USERS_COLLECTION)
+          .requestPasswordReset(resetRequest.email);
+      } catch (error) {
+        logger.warn("Password reset email request failed", error?.message || error);
+      }
+
+      return response.status(202).json({
+        message: "If an account exists for that email, a password reset link has been sent.",
+      });
+    },
+  );
+
+  app.post(
+    "/api/auth/reset-password",
+    apiLimiter,
+    async (request, response, next) => {
+      let confirmation;
+      try {
+        confirmation = normalizePasswordResetConfirmation(request.body);
+      } catch (error) {
+        return clientError(response, error.message);
+      }
+
+      try {
+        const userClient = userClientFactory();
+        await userClient.collection(USERS_COLLECTION).confirmPasswordReset(
+          confirmation.token,
+          confirmation.password,
+          confirmation.password,
+        );
+        clearSession(response, config);
+        return response.status(204).end();
+      } catch (error) {
+        if (!error?.status || error.status >= 500) return next(error);
+        return clientError(response, "This password reset link is invalid or has expired");
+      }
+    },
+  );
 
   app.post("/api/auth/logout", (_request, response) => {
     clearSession(response, config);
