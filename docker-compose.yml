@@ -86,5 +86,17 @@ services:
       app:
         condition: service_healthy
 
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: 'tunnel --no-autoupdate run'
+    environment:
+      TUNNEL_TOKEN: "eyJhIjoiOTNhMGRjOTFjMTg3YzRiMDFlZDhmOWY0NTBmY2I3MGYiLCJ0IjoiMjU0N2YxM2QtZTY0Ny00NDUxLThkMWQtMTMwMTRiZDk3NDE1IiwicyI6Ik0yTmxaVEprTm1JdE0yTTRPUzAwTVdNeUxUaGpNV0V0TXpNMFpUSm1aV1V4T0RCayJ9"
+    depends_on:
+      pocketbase:
+        condition: service_healthy
+      app:
+        condition: service_healthy
+
 volumes:
   pocketbase_data:
