@@ -182,7 +182,7 @@ export function createApp({
       contentSecurityPolicy: {
         directives: {
           defaultSrc: ["'self'"],
-          scriptSrc: ["'self'"],
+          scriptSrc: ["'self'", "https://telegram.org"],
           styleSrc: ["'self'"],
           imgSrc: ["'self'", "data:"],
           connectSrc: ["'self'"],
@@ -655,6 +655,39 @@ export function createApp({
     return { binding, identity, ownerId: binding.owner };
   };
 
+  const authenticateTelegramWebApp = async (request, response, next) => {
+    if (!telegramEnabled) return clientError(response, "Telegram integration is not configured", 503);
+    const initData = request.get("x-telegram-init-data");
+    if (!initData || initData.length > 8_192) {
+      return clientError(response, "Open this Mini App from Telegram", 401);
+    }
+
+    try {
+      const validationResponse = await fetch(`${config.telegramValidatorUrl}/validate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Telegram-Bot-Secret": config.telegramInternalSecret,
+        },
+        body: JSON.stringify({ initData }),
+        signal: AbortSignal.timeout(5_000),
+      });
+      const result = await validationResponse.json().catch(() => null);
+      if (!validationResponse.ok) {
+        return clientError(
+          response,
+          result?.error || "Telegram Mini App authentication failed",
+          validationResponse.status === 401 ? 401 : 503,
+        );
+      }
+      request.telegramIdentity = normalizeTelegramIdentity(result?.identity);
+      return next();
+    } catch (error) {
+      logger.warn("Telegram Mini App validation failed", error?.message || error);
+      return clientError(response, "Telegram Mini App authentication is temporarily unavailable", 503);
+    }
+  };
+
   const findTelegramOwnedLink = async (reference, ownerId) => {
     const value = String(reference || "").trim().toLowerCase();
     const filter = /^[a-z0-9]{15}$/.test(value)
@@ -883,6 +916,173 @@ export function createApp({
       if (!record) return clientError(response, "Link not found", 404);
       await client.collection(LINKS_COLLECTION).delete(record.id);
       return response.status(204).end();
+    } catch (error) {
+      if (error?.telegramClientError) return clientError(response, error.message, error.status);
+      return next(error);
+    }
+  });
+
+  app.use("/api/telegram/webapp", apiLimiter, authenticateTelegramWebApp);
+
+  app.get("/api/telegram/webapp/me", async (request, response, next) => {
+    try {
+      const { binding, ownerId } = await resolveTelegramOwner(request.telegramIdentity);
+      const user = await client.collection(USERS_COLLECTION).getOne(ownerId, { fields: "id,email,name" });
+      return response.json({
+        user: publicUser(user),
+        telegram: {
+          username: binding.username || request.telegramIdentity.username || null,
+          firstName: binding.firstName || request.telegramIdentity.firstName || null,
+        },
+      });
+    } catch (error) {
+      if (error?.telegramClientError) return clientError(response, error.message, error.status);
+      return next(error);
+    }
+  });
+
+  app.get("/api/telegram/webapp/links", async (request, response, next) => {
+    try {
+      const { ownerId } = await resolveTelegramOwner(request.telegramIdentity);
+      const filter = client.filter("owner = {:owner}", { owner: ownerId });
+      const records = await client.collection(LINKS_COLLECTION).getFullList({
+        filter,
+        sort: "-created",
+        fields: "id,slug,url,clicks,active,created,statsToken",
+      });
+      const baseUrl = getPublicBaseUrl(request, config.publicBaseUrl);
+      return response.json({
+        links: records.map((record) => ({
+          id: record.id,
+          slug: record.slug,
+          shortUrl: `${baseUrl}/${record.slug}`,
+          targetUrl: record.url,
+          statsUrl: `${baseUrl}/stats/${record.statsToken}`,
+          clicks: record.clicks,
+          active: record.active,
+          created: record.created,
+        })),
+      });
+    } catch (error) {
+      if (error?.telegramClientError) return clientError(response, error.message, error.status);
+      return next(error);
+    }
+  });
+
+  app.post("/api/telegram/webapp/links", async (request, response, next) => {
+    let url;
+    let alias;
+    try {
+      url = normalizeTargetUrl(request.body?.url);
+      alias = normalizeAlias(request.body?.alias);
+    } catch (error) {
+      return clientError(response, error.message);
+    }
+
+    try {
+      const { ownerId } = await resolveTelegramOwner(request.telegramIdentity);
+      const record = await createRecord(client, url, alias, ownerId, config.anonymousLinkTtlMs);
+      const baseUrl = getPublicBaseUrl(request, config.publicBaseUrl);
+      return response.status(201).json({
+        link: {
+          id: record.id,
+          slug: record.slug,
+          shortUrl: `${baseUrl}/${record.slug}`,
+          targetUrl: record.url,
+          statsUrl: `${baseUrl}/stats/${record.statsToken}`,
+          clicks: record.clicks,
+          active: record.active,
+          created: record.created,
+        },
+      });
+    } catch (error) {
+      if (error?.telegramClientError) return clientError(response, error.message, error.status);
+      if (isUniqueSlugError(error)) return clientError(response, "This slug is already taken", 409);
+      return next(error);
+    }
+  });
+
+  app.patch("/api/telegram/webapp/links/:reference", async (request, response, next) => {
+    let update;
+    try {
+      update = normalizeOwnedLinkUpdate(request.body);
+    } catch (error) {
+      return clientError(response, error.message);
+    }
+
+    try {
+      const { ownerId } = await resolveTelegramOwner(request.telegramIdentity);
+      const record = await findTelegramOwnedLink(request.params.reference, ownerId);
+      if (!record) return clientError(response, "Link not found", 404);
+      const updated = await client.collection(LINKS_COLLECTION).update(record.id, update);
+      const baseUrl = getPublicBaseUrl(request, config.publicBaseUrl);
+      return response.json({
+        link: {
+          id: updated.id,
+          slug: updated.slug,
+          shortUrl: `${baseUrl}/${updated.slug}`,
+          targetUrl: updated.url,
+          clicks: updated.clicks,
+          active: updated.active,
+          created: updated.created,
+        },
+      });
+    } catch (error) {
+      if (error?.telegramClientError) return clientError(response, error.message, error.status);
+      if (isUniqueSlugError(error)) return clientError(response, "This slug is already taken", 409);
+      return next(error);
+    }
+  });
+
+  app.delete("/api/telegram/webapp/links/:reference", async (request, response, next) => {
+    try {
+      const { ownerId } = await resolveTelegramOwner(request.telegramIdentity);
+      const record = await findTelegramOwnedLink(request.params.reference, ownerId);
+      if (!record) return clientError(response, "Link not found", 404);
+      await client.collection(LINKS_COLLECTION).delete(record.id);
+      return response.status(204).end();
+    } catch (error) {
+      if (error?.telegramClientError) return clientError(response, error.message, error.status);
+      return next(error);
+    }
+  });
+
+  app.get("/api/telegram/webapp/links/:reference/stats", async (request, response, next) => {
+    try {
+      const { ownerId } = await resolveTelegramOwner(request.telegramIdentity);
+      const record = await findTelegramOwnedLink(request.params.reference, ownerId);
+      if (!record) return clientError(response, "Link not found", 404);
+      const filter = client.filter("link = {:link}", { link: record.id });
+      const events = await client.collection(CLICK_EVENTS_COLLECTION).getList(
+        1,
+        config.analyticsMaxEvents,
+        {
+          filter,
+          sort: "-created",
+          skipTotal: true,
+          fields: "countryCode,referrerHost,visitorHash,device,browser,os",
+        },
+      );
+      const analytics = buildAnalytics(events.items, record.clicks, 0, []);
+      const baseUrl = getPublicBaseUrl(request, config.publicBaseUrl);
+      return response.json({
+        link: {
+          id: record.id,
+          slug: record.slug,
+          shortUrl: `${baseUrl}/${record.slug}`,
+          targetUrl: record.url,
+          statsUrl: `${baseUrl}/stats/${record.statsToken}`,
+          active: record.active,
+        },
+        analytics: {
+          totals: analytics.totals,
+          countries: analytics.countries.slice(0, 10),
+          referrers: analytics.referrers.slice(0, 10),
+          devices: analytics.devices.slice(0, 10),
+          browsers: analytics.browsers.slice(0, 10),
+          operatingSystems: analytics.operatingSystems.slice(0, 10),
+        },
+      });
     } catch (error) {
       if (error?.telegramClientError) return clientError(response, error.message, error.status);
       return next(error);

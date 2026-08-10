@@ -55,6 +55,7 @@ const schema = z
     MAIL_FROM_ADDRESS: optionalString,
     TELEGRAM_BOT_USERNAME: optionalString,
     TELEGRAM_INTERNAL_SECRET: optionalString,
+    TELEGRAM_VALIDATOR_URL: z.url().default("http://telegram-bot:3001"),
     TELEGRAM_LINK_TTL_MINUTES: z.coerce.number().int().min(1).max(60).default(10),
   })
   .superRefine((env, context) => {
@@ -208,6 +209,7 @@ export function loadConfig(environment = process.env) {
     mailFromAddress: result.data.MAIL_FROM_ADDRESS,
     telegramBotUsername: result.data.TELEGRAM_BOT_USERNAME,
     telegramInternalSecret: result.data.TELEGRAM_INTERNAL_SECRET,
+    telegramValidatorUrl: result.data.TELEGRAM_VALIDATOR_URL.replace(/\/$/, ""),
     telegramLinkTtlMs: result.data.TELEGRAM_LINK_TTL_MINUTES * 60 * 1_000,
   };
 }

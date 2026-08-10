@@ -1,11 +1,13 @@
 import { loadTelegramBotConfig } from "./telegram-bot-config.js";
 import { parseTelegramLinkParameter } from "./telegram.js";
+import { createTelegramWebAppValidator } from "./telegram-webapp.js";
 
 const config = loadTelegramBotConfig();
 const telegramApiUrl = `https://api.telegram.org/bot${config.botToken}`;
 let nextUpdateId = 0;
 let stopping = false;
 let activeRequestController;
+let validatorServer;
 
 class InternalApiError extends Error {
   constructor(message, status) {
@@ -87,6 +89,7 @@ function commandParts(text) {
 
 function helpText() {
   return `<b>Weblink Shortener</b>\n\n` +
+    `/app — open the Mini App\n` +
     `/new &lt;URL&gt; [slug] — create a link\n` +
     `/links — list and manage links\n` +
     `/stats &lt;slug&gt; — show statistics\n` +
@@ -97,6 +100,15 @@ function helpText() {
     `/account — show the connected account\n` +
     `/logout — disconnect Telegram\n` +
     `/help — show this help`;
+}
+
+function webAppButton() {
+  return {
+    inline_keyboard: [[{
+      text: "Open Weblink Shortener",
+      web_app: { url: config.webAppUrl },
+    }]],
+  };
 }
 
 function loginRequiredText() {
@@ -163,6 +175,7 @@ async function connectAccount(message, token) {
   await sendMessage(
     message.chat.id,
     `Connected to <b>${escapeHtml(data.user.email)}</b>.\n\n${helpText()}`,
+    webAppButton(),
   );
 }
 
@@ -179,7 +192,7 @@ async function handleCommand(message) {
       await connectAccount(message, args[0]);
       return;
     }
-    await sendMessage(message.chat.id, `${helpText()}\n\n${loginRequiredText()}`);
+    await sendMessage(message.chat.id, `${helpText()}\n\n${loginRequiredText()}`, webAppButton());
     return;
   }
   if (command === "/help") {
@@ -189,6 +202,10 @@ async function handleCommand(message) {
   if (command === "/login") {
     if (!args[0]) throw new Error("Use /login <one-time-token> or open the link generated on the website.");
     await connectAccount(message, args[0]);
+    return;
+  }
+  if (command === "/app") {
+    await sendMessage(message.chat.id, "Open your link dashboard:", webAppButton());
     return;
   }
   if (command === "/account") {
@@ -343,8 +360,16 @@ async function poll() {
 async function main() {
   const bot = await telegram("getMe");
   await telegram("deleteWebhook", { drop_pending_updates: false });
+  await telegram("setChatMenuButton", {
+    menu_button: {
+      type: "web_app",
+      text: "Open app",
+      web_app: { url: config.webAppUrl },
+    },
+  });
   await telegram("setMyCommands", {
     commands: [
+      { command: "app", description: "Open the Mini App dashboard" },
       { command: "new", description: "Create a short link" },
       { command: "links", description: "List and manage links" },
       { command: "stats", description: "View link statistics" },
@@ -357,7 +382,18 @@ async function main() {
       { command: "help", description: "Show commands" },
     ],
   });
-  console.log(`Telegram bot @${bot.username} started with long polling.`);
+  validatorServer = createTelegramWebAppValidator({
+    botToken: config.botToken,
+    internalSecret: config.internalSecret,
+    maxAgeSeconds: config.webAppAuthMaxAgeSeconds,
+  });
+  await new Promise((resolve, reject) => {
+    validatorServer.once("error", reject);
+    validatorServer.listen(config.validatorPort, config.validatorHost, resolve);
+  });
+  console.log(
+    `Telegram bot @${bot.username} started with long polling and Mini App validation on port ${config.validatorPort}.`,
+  );
   await poll();
 }
 
@@ -365,6 +401,7 @@ function shutdown(signal) {
   console.log(`Received ${signal}, stopping Telegram bot...`);
   stopping = true;
   activeRequestController?.abort();
+  validatorServer?.close();
 }
 
 process.on("SIGINT", () => shutdown("SIGINT"));
