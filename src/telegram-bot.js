@@ -96,6 +96,8 @@ function helpText() {
     `/edit &lt;slug&gt; &lt;URL&gt; [new-slug] — change a link\n` +
     `/enable &lt;slug&gt; — enable a link\n` +
     `/disable &lt;slug&gt; — disable a link\n` +
+    `/public &lt;slug&gt; — allow public statistics\n` +
+    `/private &lt;slug&gt; — restrict statistics to you\n` +
     `/delete &lt;slug&gt; — delete a link\n` +
     `/account — show the connected account\n` +
     `/logout — disconnect Telegram\n` +
@@ -119,12 +121,13 @@ function linkButtons(link) {
   return [
     { text: "Statistics", callback_data: `stats:${link.id}` },
     { text: link.active ? "Disable" : "Enable", callback_data: `active:${link.id}:${link.active ? 0 : 1}` },
+    { text: link.statsPublic ? "Make stats private" : "Make stats public", callback_data: `visibility:${link.id}:${link.statsPublic ? 0 : 1}` },
     { text: "Delete", callback_data: `delete:${link.id}` },
   ];
 }
 
 function formatLink(link) {
-  return `<b>${escapeHtml(link.slug)}</b> · ${link.active ? "active" : "disabled"} · ${link.clicks} clicks\n` +
+  return `<b>${escapeHtml(link.slug)}</b> · ${link.active ? "active" : "disabled"} · ${link.statsPublic ? "public stats" : "private stats"} · ${link.clicks} clicks\n` +
     `<a href="${escapeHtml(link.shortUrl)}">${escapeHtml(link.shortUrl)}</a>\n` +
     `→ ${escapeHtml(compactUrl(link.targetUrl))}`;
 }
@@ -252,6 +255,18 @@ async function handleCommand(message) {
     await sendMessage(message.chat.id, `${data.link.active ? "Enabled" : "Disabled"}: ${escapeHtml(data.link.shortUrl)}`);
     return;
   }
+  if (command === "/public" || command === "/private") {
+    if (!args[0]) throw new Error(`Use ${command} <slug>`);
+    const data = await internalApi(`/api/internal/telegram/links/${encodeURIComponent(args[0])}`, identity, {
+      method: "PATCH",
+      body: { statsPublic: command === "/public" },
+    });
+    await sendMessage(
+      message.chat.id,
+      `Statistics are now ${data.link.statsPublic ? "public" : "private"}: ${escapeHtml(data.link.shortUrl)}`,
+    );
+    return;
+  }
   if (command === "/delete") {
     if (!args[0]) throw new Error("Use /delete <slug>");
     const data = await internalApi("/api/internal/telegram/links/list", identity);
@@ -295,6 +310,15 @@ async function handleCallback(query) {
       body: { active: value === "1" },
     });
     await sendMessage(message.chat.id, `${data.link.active ? "Enabled" : "Disabled"}: ${escapeHtml(data.link.shortUrl)}`);
+  } else if (action === "visibility") {
+    const data = await internalApi(`/api/internal/telegram/links/${encodeURIComponent(reference)}`, identity, {
+      method: "PATCH",
+      body: { statsPublic: value === "1" },
+    });
+    await sendMessage(
+      message.chat.id,
+      `Statistics are now ${data.link.statsPublic ? "public" : "private"}: ${escapeHtml(data.link.shortUrl)}`,
+    );
   } else if (action === "delete") {
     await sendMessage(message.chat.id, "Delete this link? This cannot be undone.", {
       inline_keyboard: [[
@@ -376,6 +400,8 @@ async function main() {
       { command: "edit", description: "Change a destination or slug" },
       { command: "enable", description: "Enable a short link" },
       { command: "disable", description: "Disable a short link" },
+      { command: "public", description: "Allow public link statistics" },
+      { command: "private", description: "Restrict statistics to you" },
       { command: "delete", description: "Delete a short link" },
       { command: "account", description: "Show the connected account" },
       { command: "logout", description: "Disconnect Telegram" },

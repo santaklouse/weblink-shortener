@@ -20,6 +20,7 @@ A minimal Node.js URL shortener with PocketBase running behind the application.
 - Clicks are incremented atomically.
 - Detailed analytics include country, referrer, visitor address, device, browser, operating system, recent click time, and expandable HTTP request metadata.
 - Open statistics pages refresh their data in the background every 10 seconds without a page reload.
+- Statistics for registered users' links are private by default; owners can make an individual link's statistics public.
 - Unique visitors are counted with a keyed hash; sensitive request data can be redacted from statistics output.
 - PocketBase Dashboard is available on a separate administrator hostname.
 - The public hostname proxies only to Node.js. PocketBase credentials and API calls are never exposed to the browser.
@@ -88,8 +89,8 @@ Set **Cache eligibility** to **Bypass cache**. Then purge these URLs once so obj
 
 ```text
 https://l1n.pp.ua/telegram
-https://l1n.pp.ua/telegram-webapp.js?v=1
-https://l1n.pp.ua/telegram-webapp.css?v=2
+https://l1n.pp.ua/telegram-webapp.js?v=2
+https://l1n.pp.ua/telegram-webapp.css?v=3
 ```
 
 After saving a file, close and reopen the Telegram Mini App or reload it. Verify that the public response is no longer cached:
@@ -327,6 +328,8 @@ PocketBase collection API rules are locked. The browser calls only these Node.js
 PocketBase superuser credentials exist only in the `app` and `setup` container environments. They are not included in browser HTML or JavaScript.
 
 The `/api/internal/telegram/*` routes require `TELEGRAM_INTERNAL_SECRET`, are called only from the Compose network, and always resolve link ownership from the stored Telegram binding. The bot container has no PocketBase credentials.
+
+For links owned by registered users, `GET /api/stats/:token` also requires the owner's application session unless that link has `statsPublic=true`. Anonymous links remain accessible through their secret statistics URL. Owners can change this setting in the website or Telegram Mini App edit dialog, or with the bot's `/public <slug>` and `/private <slug>` commands.
 
 ## Running without Docker
 

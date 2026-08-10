@@ -155,6 +155,13 @@ async function ensureLinksCollection(usersCollection) {
         required: false,
       });
     }
+    if (!fieldNames.has("statsPublic")) {
+      additions.push({
+        name: "statsPublic",
+        type: "bool",
+        required: false,
+      });
+    }
     if (!fieldNames.has("created")) {
       additions.push({
         name: "created",
@@ -247,6 +254,11 @@ async function ensureLinksCollection(usersCollection) {
         max: 43,
         pattern: "^[A-Za-z0-9_-]+$",
         autogeneratePattern: "",
+      },
+      {
+        name: "statsPublic",
+        type: "bool",
+        required: false,
       },
       {
         name: "expiresAt",

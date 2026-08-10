@@ -70,13 +70,17 @@ test("allows an authenticated owner to edit a destination and slug", async (cont
       "Content-Type": "application/json",
       Cookie: "weblink_session=existing-user-session",
     },
-    body: JSON.stringify({ url: "https://example.com/new", alias: "new-link" }),
+    body: JSON.stringify({
+      url: "https://example.com/new",
+      alias: "new-link",
+      statsPublic: true,
+    }),
   });
 
   assert.equal(response.status, 200);
   assert.deepEqual(updates, [{
     id: linkId,
-    update: { url: "https://example.com/new", slug: "new-link" },
+    update: { url: "https://example.com/new", slug: "new-link", statsPublic: true },
   }]);
   assert.deepEqual(await response.json(), {
     id: linkId,
@@ -84,5 +88,6 @@ test("allows an authenticated owner to edit a destination and slug", async (cont
     shortUrl: "https://short.example/new-link",
     targetUrl: "https://example.com/new",
     active: true,
+    statsPublic: true,
   });
 });

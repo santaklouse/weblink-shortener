@@ -6,8 +6,8 @@
     <meta name="description" content="Manage Weblink Shortener links inside Telegram" />
     <title>Weblink Shortener</title>
     <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
-    <link rel="stylesheet" href="/telegram-webapp.css?v=2" />
-    <script src="/telegram-webapp.js?v=1" defer></script>
+    <link rel="stylesheet" href="/telegram-webapp.css?v=3" />
+    <script src="/telegram-webapp.js?v=2" defer></script>
   </head>
   <body>
     <main class="mini-app-shell">
@@ -87,6 +87,10 @@
         <input id="edit-url" name="url" type="url" inputmode="url" autocomplete="url" required />
         <label for="edit-slug">Slug</label>
         <input id="edit-slug" name="slug" type="text" minlength="4" maxlength="32" pattern="[a-zA-Z0-9_-]{4,32}" autocomplete="off" required />
+        <label class="checkbox-label" for="edit-stats-public">
+          <input id="edit-stats-public" name="statsPublic" type="checkbox" />
+          Allow anyone with the statistics URL to view statistics
+        </label>
         <p id="edit-message" class="form-message" role="status" aria-live="polite"></p>
         <button type="submit">Save changes</button>
       </form>

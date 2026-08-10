@@ -220,7 +220,7 @@ shortenForm.addEventListener("submit", async (event) => {
     statsUrl.href = data.statsUrl;
     expiryNote.textContent = data.expiresAt
       ? `This link expires on ${new Date(data.expiresAt).toLocaleString("en-US")}. Save the statistics page URL.`
-      : "This permanent link is attached to your account.";
+      : "This permanent link is attached to your account. Its statistics are private by default.";
     copyButton.textContent = "Copy";
     result.hidden = false;
     if (currentUser) loadLinks();
@@ -271,7 +271,7 @@ function createLinkRow(link) {
   const statsCell = document.createElement("td");
   const statsAnchor = document.createElement("a");
   statsAnchor.href = link.statsUrl;
-  statsAnchor.textContent = "View";
+  statsAnchor.textContent = link.statsPublic ? "View · Public" : "View · Private";
   statsCell.append(statsAnchor);
   const actionsCell = document.createElement("td");
   const editButton = document.createElement("button");
@@ -282,6 +282,7 @@ function createLinkRow(link) {
     editingLink = link;
     editLinkForm.elements.url.value = link.targetUrl;
     editLinkForm.elements.slug.value = link.slug;
+    editLinkForm.elements.statsPublic.checked = link.statsPublic === true;
     editLinkMessage.textContent = "";
     editLinkMessage.classList.remove("error");
     editLinkDialog.showModal();
@@ -339,7 +340,11 @@ editLinkForm.addEventListener("submit", async (event) => {
     await api(`/api/links/${editingLink.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: values.get("url"), alias: values.get("slug") }),
+      body: JSON.stringify({
+        url: values.get("url"),
+        alias: values.get("slug"),
+        statsPublic: values.get("statsPublic") === "on",
+      }),
     });
     editLinkDialog.close();
     editingLink = null;

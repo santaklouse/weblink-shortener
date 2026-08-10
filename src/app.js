@@ -138,6 +138,7 @@ async function createRecord(client, url, requestedSlug, ownerId, anonymousLinkTt
         active: true,
         owner: ownerId || "",
         statsToken,
+        statsPublic: !ownerId,
         expiresAt,
       });
     } catch (error) {
@@ -161,7 +162,15 @@ function normalizeOwnedLinkUpdate(body) {
     if (typeof body.active !== "boolean") throw new Error("The active field must be true or false");
     update.active = body.active;
   }
-  if (Object.keys(update).length === 0) throw new Error("Provide a URL, slug, or active state to update");
+  if (Object.hasOwn(body || {}, "statsPublic")) {
+    if (typeof body.statsPublic !== "boolean") {
+      throw new Error("The statsPublic field must be true or false");
+    }
+    update.statsPublic = body.statsPublic;
+  }
+  if (Object.keys(update).length === 0) {
+    throw new Error("Provide a URL, slug, active state, or statistics visibility to update");
+  }
   return update;
 }
 
@@ -798,7 +807,7 @@ export function createApp({
       const records = await client.collection(LINKS_COLLECTION).getList(1, 20, {
         filter,
         sort: "-created",
-        fields: "id,slug,url,clicks,active,created,statsToken",
+        fields: "id,slug,url,clicks,active,statsPublic,created,statsToken",
       });
       const baseUrl = getPublicBaseUrl(request, config.publicBaseUrl);
       return response.json({
@@ -811,6 +820,7 @@ export function createApp({
           statsUrl: `${baseUrl}/stats/${record.statsToken}`,
           clicks: record.clicks,
           active: record.active,
+          statsPublic: record.statsPublic,
         })),
       });
     } catch (error) {
@@ -842,6 +852,7 @@ export function createApp({
           statsUrl: `${baseUrl}/stats/${record.statsToken}`,
           clicks: record.clicks,
           active: record.active,
+          statsPublic: record.statsPublic,
         },
       });
     } catch (error) {
@@ -873,6 +884,7 @@ export function createApp({
           targetUrl: updated.url,
           clicks: updated.clicks,
           active: updated.active,
+          statsPublic: updated.statsPublic,
         },
       });
     } catch (error) {
@@ -910,6 +922,7 @@ export function createApp({
           targetUrl: record.url,
           statsUrl: `${baseUrl}/stats/${record.statsToken}`,
           active: record.active,
+          statsPublic: record.statsPublic,
         },
         analytics: {
           totals: analytics.totals,
@@ -963,7 +976,7 @@ export function createApp({
       const records = await client.collection(LINKS_COLLECTION).getFullList({
         filter,
         sort: "-created",
-        fields: "id,slug,url,clicks,active,created,statsToken",
+        fields: "id,slug,url,clicks,active,statsPublic,created,statsToken",
       });
       const baseUrl = getPublicBaseUrl(request, config.publicBaseUrl);
       return response.json({
@@ -975,6 +988,7 @@ export function createApp({
           statsUrl: `${baseUrl}/stats/${record.statsToken}`,
           clicks: record.clicks,
           active: record.active,
+          statsPublic: record.statsPublic,
           created: record.created,
         })),
       });
@@ -1007,6 +1021,7 @@ export function createApp({
           statsUrl: `${baseUrl}/stats/${record.statsToken}`,
           clicks: record.clicks,
           active: record.active,
+          statsPublic: record.statsPublic,
           created: record.created,
         },
       });
@@ -1039,6 +1054,7 @@ export function createApp({
           targetUrl: updated.url,
           clicks: updated.clicks,
           active: updated.active,
+          statsPublic: updated.statsPublic,
           created: updated.created,
         },
       });
@@ -1090,6 +1106,7 @@ export function createApp({
           targetUrl: record.url,
           statsUrl: `${baseUrl}/stats/${record.statsToken}`,
           active: record.active,
+          statsPublic: record.statsPublic,
         },
         analytics: {
           totals: analytics.totals,
@@ -1112,7 +1129,7 @@ export function createApp({
       const records = await client.collection(LINKS_COLLECTION).getFullList({
         filter,
         sort: "-created",
-        fields: "id,slug,url,clicks,active,created,expiresAt,statsToken",
+        fields: "id,slug,url,clicks,active,statsPublic,created,expiresAt,statsToken",
       });
       const baseUrl = getPublicBaseUrl(request, config.publicBaseUrl);
       response.json({
@@ -1123,6 +1140,7 @@ export function createApp({
           targetUrl: record.url,
           clicks: record.clicks,
           active: record.active,
+          statsPublic: record.statsPublic,
           created: record.created,
           expiresAt: record.expiresAt || null,
           statsUrl: `${baseUrl}/stats/${record.statsToken}`,
@@ -1164,6 +1182,7 @@ export function createApp({
         targetUrl: record.url,
         clicks: record.clicks,
         active: record.active,
+        statsPublic: record.statsPublic,
         created: record.created,
         expiresAt: record.expiresAt || null,
         statsUrl: `${baseUrl}/stats/${record.statsToken}`,
@@ -1208,6 +1227,7 @@ export function createApp({
         shortUrl: `${baseUrl}/${updated.slug}`,
         targetUrl: updated.url,
         active: updated.active,
+        statsPublic: updated.statsPublic,
       });
     } catch (error) {
       if (isUniqueSlugError(error)) return clientError(response, "This slug is already taken", 409);
@@ -1226,7 +1246,7 @@ export function createApp({
     }
   });
 
-  app.get("/api/stats/:token", async (request, response, next) => {
+  app.get("/api/stats/:token", optionalAuthenticate, async (request, response, next) => {
     if (!/^[A-Za-z0-9_-]{43}$/.test(request.params.token)) {
       return clientError(response, "Statistics not found", 404);
     }
@@ -1234,8 +1254,11 @@ export function createApp({
     try {
       const filter = client.filter("statsToken = {:token}", { token: request.params.token });
       const record = await client.collection(LINKS_COLLECTION).getFirstListItem(filter, {
-        fields: "id,slug,url,clicks,active,created,expiresAt",
+        fields: "id,slug,url,clicks,active,owner,statsPublic,created,expiresAt",
       });
+      if (record.owner && !record.statsPublic && request.user?.id !== record.owner) {
+        return clientError(response, "Only the link owner can view these statistics", 403);
+      }
       const eventsFilter = client.filter("link = {:link}", { link: record.id });
       const [eventsPage, recentEventsPage] = await Promise.all([
         client.collection(CLICK_EVENTS_COLLECTION).getList(
@@ -1269,6 +1292,7 @@ export function createApp({
           targetUrl: record.url,
           clicks: record.clicks,
           active: record.active,
+          statsPublic: record.statsPublic || !record.owner,
           created: record.created,
           expiresAt: record.expiresAt || null,
           expired,

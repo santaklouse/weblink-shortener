@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="A simple URL shortener with click statistics" />
     <title>Short URL</title>
-    <link rel="stylesheet" href="/styles.css?v=15" />
-    <script src="/app.js?v=8" defer></script>
+    <link rel="stylesheet" href="/styles.css?v=16" />
+    <script src="/app.js?v=9" defer></script>
     <script src="/password-visibility.js?v=1" defer></script>
   </head>
   <body>
@@ -121,6 +121,10 @@
         <input id="edit-link-url" name="url" type="url" autocomplete="url" required />
         <label for="edit-link-slug">Slug</label>
         <input id="edit-link-slug" name="slug" type="text" minlength="4" maxlength="32" pattern="[a-zA-Z0-9_-]{4,32}" autocomplete="off" required />
+        <label class="checkbox-label" for="edit-link-stats-public">
+          <input id="edit-link-stats-public" name="statsPublic" type="checkbox" />
+          Allow anyone with the statistics URL to view statistics
+        </label>
         <p id="edit-link-message" class="message" role="status" aria-live="polite"></p>
         <div class="dialog-actions">
           <button id="edit-link-cancel" class="mini-button" type="button">Cancel</button>

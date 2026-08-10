@@ -144,6 +144,7 @@ function openEditor(link) {
   editingLink = link;
   editForm.elements.url.value = link.targetUrl;
   editForm.elements.slug.value = link.slug;
+  editForm.elements.statsPublic.checked = link.statsPublic === true;
   setMessage(editMessage, "");
   editDialog.showModal();
 }
@@ -194,7 +195,7 @@ function renderLink(link) {
   destination.textContent = `→ ${link.targetUrl}`;
   const meta = document.createElement("p");
   meta.className = "link-meta";
-  meta.textContent = `${link.clicks} clicks${link.created ? ` · ${formatDate(link.created)}` : ""}`;
+  meta.textContent = `${link.clicks} clicks · ${link.statsPublic ? "Public statistics" : "Private statistics"}${link.created ? ` · ${formatDate(link.created)}` : ""}`;
 
   const actions = document.createElement("div");
   actions.className = "link-actions";
@@ -294,7 +295,11 @@ editForm.addEventListener("submit", async (event) => {
     await api(`/api/telegram/webapp/links/${encodeURIComponent(editingLink.id)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: values.get("url"), alias: values.get("slug") }),
+      body: JSON.stringify({
+        url: values.get("url"),
+        alias: values.get("slug"),
+        statsPublic: values.get("statsPublic") === "on",
+      }),
     });
     editDialog.close();
     editingLink = null;
