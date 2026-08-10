@@ -157,6 +157,12 @@ TRUST_CLOUDFLARE_HEADERS=true
 
 This trusts `CF-IPCountry` for the country and `CF-Connecting-IP` for privacy-masked visitor analytics. Do not enable it while clients can connect directly to the origin, because direct clients could spoof these headers.
 
+Cloudflare Tunnel deployments that route through the included Nginx proxy must enable this setting. Otherwise, click analytics see the intermediate Docker network and may display an address such as `172.18.0.0`. Recreate the application container after changing the value:
+
+```bash
+docker compose up -d --no-deps --force-recreate app
+```
+
 Full visitor IPs are never stored. IPv4 addresses are masked to `/24`, IPv6 addresses to `/48`, and unique visitors are derived with `HMAC-SHA256` using `ANALYTICS_HASH_SECRET`. Referrer URLs may contain query parameters, so the statistics URL should be treated as a secret for anonymous links.
 
 ## Access model
