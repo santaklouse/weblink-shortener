@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import test from "node:test";
 import {
+  createTelegramBotServer,
   createTelegramWebAppValidator,
   validateTelegramWebAppInitData,
 } from "../src/telegram-webapp.js";
@@ -45,6 +46,49 @@ test("validates signed Telegram Mini App initData and returns a private identity
       firstName: "Person",
     },
   );
+});
+
+test("accepts Telegram webhook updates only with the configured secret", async (context) => {
+  const updates = [];
+  const webhookSecret = "telegram_webhook_secret_used_only_for_tests";
+  const server = createTelegramBotServer({
+    botToken,
+    internalSecret,
+    maxAgeSeconds: 300,
+    webhookSecret,
+    async handleWebhookUpdate(update) {
+      updates.push(update);
+    },
+    logger: {error() {}},
+  });
+  server.listen(0, "127.0.0.1");
+  await new Promise((resolve, reject) => {
+    server.once("listening", resolve);
+    server.once("error", reject);
+  });
+  context.after(() => new Promise((resolve) => server.close(resolve)));
+  const address = server.address();
+  const url = `http://127.0.0.1:${address.port}/webhook`;
+  const update = {update_id: 123, message: {text: "/start"}};
+
+  const hidden = await fetch(url, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(update),
+  });
+  assert.equal(hidden.status, 404);
+
+  const accepted = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Telegram-Bot-Api-Secret-Token": webhookSecret,
+    },
+    body: JSON.stringify(update),
+  });
+  assert.equal(accepted.status, 200);
+  assert.deepEqual(await accepted.json(), {ok: true});
+  assert.deepEqual(updates, [update]);
 });
 
 test("rejects tampered and expired Telegram Mini App initData", () => {

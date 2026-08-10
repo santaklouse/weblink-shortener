@@ -72,36 +72,67 @@ function sendJson(response, status, body) {
   response.end(payload);
 }
 
-async function readJsonBody(request) {
+async function readJsonBody(request, maxLength = 16_384) {
   const chunks = [];
   let length = 0;
   for await (const chunk of request) {
     length += chunk.length;
-    if (length > 16_384) throw new Error("Request body is too large");
+    if (length > maxLength) throw new Error("Request body is too large");
     chunks.push(chunk);
   }
   return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
 }
 
-export function createTelegramWebAppValidator({
+export function createTelegramBotServer({
   botToken,
   internalSecret,
   maxAgeSeconds,
+  webhookSecret,
+  handleWebhookUpdate,
+  logger = console,
 }) {
   return createServer(async (request, response) => {
-    if (request.method !== "POST" || request.url !== "/validate") {
-      return sendJson(response, 404, { error: "Not found" });
-    }
-    if (!matchesInternalSecret(request.headers["x-telegram-bot-secret"], internalSecret)) {
+    if (request.method !== "POST") {
       return sendJson(response, 404, { error: "Not found" });
     }
 
-    try {
-      const body = await readJsonBody(request);
-      const identity = validateTelegramWebAppInitData(body.initData, botToken, { maxAgeSeconds });
-      return sendJson(response, 200, { identity });
-    } catch (error) {
-      return sendJson(response, 401, { error: error.message });
+    if (request.url === "/validate") {
+      if (!matchesInternalSecret(request.headers["x-telegram-bot-secret"], internalSecret)) {
+        return sendJson(response, 404, { error: "Not found" });
+      }
+
+      try {
+        const body = await readJsonBody(request);
+        const identity = validateTelegramWebAppInitData(body.initData, botToken, { maxAgeSeconds });
+        return sendJson(response, 200, { identity });
+      } catch (error) {
+        return sendJson(response, 401, { error: error.message });
+      }
     }
+
+    if (request.url === "/webhook") {
+      if (!webhookSecret
+        || !matchesInternalSecret(
+          request.headers["x-telegram-bot-api-secret-token"],
+          webhookSecret,
+        )) {
+        return sendJson(response, 404, {error: "Not found"});
+      }
+
+      try {
+        const update = await readJsonBody(request, 65_536);
+        await handleWebhookUpdate(update);
+        return sendJson(response, 200, {ok: true});
+      } catch (error) {
+        logger.error("Telegram webhook update failed:", error?.message || error);
+        return sendJson(response, 500, {error: "Webhook update failed"});
+      }
+    }
+
+    return sendJson(response, 404, {error: "Not found"});
   });
+}
+
+export function createTelegramWebAppValidator(options) {
+  return createTelegramBotServer(options);
 }

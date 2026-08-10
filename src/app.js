@@ -199,7 +199,7 @@ export function createApp({
       },
     }),
   );
-  app.use(express.json({ limit: "8kb" }));
+  app.use(express.json({ limit: "64kb" }));
   app.use(cookieParser());
   const staticCache = config.staticCache !== false;
   app.use(express.static(publicDirectory, {
@@ -251,6 +251,34 @@ export function createApp({
   };
 
   app.use("/api/internal/telegram", authenticateTelegramInternal, telegramInternalLimiter);
+
+  app.post("/api/telegram/webhook", async (request, response) => {
+    if (!telegramEnabled) return clientError(response, "Not found", 404);
+
+    try {
+      const webhookResponse = await fetch(`${config.telegramValidatorUrl}/webhook`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Telegram-Bot-Api-Secret-Token":
+            request.get("x-telegram-bot-api-secret-token") || "",
+        },
+        body: JSON.stringify(request.body),
+        signal: AbortSignal.timeout(25_000),
+      });
+      if (!webhookResponse.ok) {
+        return clientError(
+          response,
+          webhookResponse.status === 404 ? "Not found" : "Webhook update failed",
+          webhookResponse.status,
+        );
+      }
+      return response.json({ok: true});
+    } catch (error) {
+      logger.error("Telegram webhook forwarding failed", error?.message || error);
+      return clientError(response, "Webhook delivery is temporarily unavailable", 503);
+    }
+  });
 
   const resolveUser = async (request, response, next, required) => {
     const token = request.cookies[config.sessionCookieName];

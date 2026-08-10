@@ -160,7 +160,7 @@ The setup container enables Google OAuth for the PocketBase `users` collection a
 
 ## Telegram bot
 
-Create the bot in Telegram by opening [@BotFather](https://t.me/BotFather), running `/newbot`, and following its prompts. Save the returned token as `TELEGRAM_BOT_TOKEN` and the bot username without `@` as `TELEGRAM_BOT_USERNAME`. Generate `TELEGRAM_INTERNAL_SECRET` with the command shown above; do not reuse the bot token or analytics secret. Set `TELEGRAM_WEBAPP_URL` to the public HTTPS URL of the Mini App; this deployment uses `https://l1n.pp.ua/telegram`.
+Create the bot in Telegram by opening [@BotFather](https://t.me/BotFather), running `/newbot`, and following its prompts. Save the returned token as `TELEGRAM_BOT_TOKEN` and the bot username without `@` as `TELEGRAM_BOT_USERNAME`. Generate `TELEGRAM_INTERNAL_SECRET` with the command shown above; do not reuse the bot token or analytics secret. Set `TELEGRAM_WEBAPP_URL=https://l1n.pp.ua/telegram` and `TELEGRAM_WEBHOOK_URL=https://l1n.pp.ua/api/telegram/webhook`. `TELEGRAM_WEBHOOK_SECRET` is optional; when it is empty, the bot derives a separate webhook secret from `TELEGRAM_INTERNAL_SECRET` without exposing the internal secret.
 
 ### BotFather configuration
 
@@ -175,11 +175,7 @@ For `@weblink_shortener_bot`, use these exact settings in [@BotFather](https://t
 
 The bot also calls `setChatMenuButton` during startup, so step 4 is restored automatically after each deployment. Configuring the Main Mini App in step 2 is still recommended because it adds a prominent launch button to the bot profile.
 
-If the bot log reports `Conflict: terminated by other getUpdates request`, another process is using the same token. Stop the other process or send `/token` to BotFather, select `@weblink_shortener_bot`, generate a replacement token, save it as `TELEGRAM_BOT_TOKEN` in `.env`, and recreate the bot container:
-
-```bash
-docker compose --profile telegram up -d --force-recreate telegram-bot
-```
+At startup the bot calls `setWebhook` with the HTTPS URL, `allowed_updates=["message","callback_query"]`, and a secret token. Telegram includes that secret in `X-Telegram-Bot-Api-Secret-Token`; requests without the correct value receive `404`. Setting the webhook disables `getUpdates`, so another old long-polling process can no longer consume this bot's updates.
 
 Start the Telegram profile:
 
@@ -204,12 +200,13 @@ Available commands:
 - `/stats <slug>`
 - `/edit <slug> <URL> [new-slug]`
 - `/enable <slug>` and `/disable <slug>`
+- `/public <slug>` and `/private <slug>`
 - `/delete <slug>`
 - `/account`
 - `/logout`
 - `/help`
 
-The bot communicates only with the private Node.js API at `http://app:3000` inside the Compose network. It never connects to PocketBase directly. Long polling is used, so no public Telegram webhook or additional domain is required. The Mini App sends Telegram `initData` to Node.js, which delegates signature validation to the bot's private validator on port `3001`. The bot token is never exposed to Node.js or the browser.
+Telegram sends updates to `https://l1n.pp.ua/api/telegram/webhook`. The public Node.js application forwards only this route to the bot's private server on port `3001`, where the Telegram secret header is validated. The bot communicates with the private application API at `http://app:3000` and never connects to PocketBase directly. The same private server validates Mini App `initData`. The bot token and webhook secret are never exposed to the browser.
 
 ## Email verification
 
@@ -366,8 +363,10 @@ Set either `POCKETBASE_TOKEN` or both `POCKETBASE_SUPERUSER_EMAIL` and `POCKETBA
 - `HIDE_SENSITIVE_HEADERS=true`: redact sensitive headers, query parameters, and full visitor IP addresses in statistics API responses.
 - `TELEGRAM_LINK_TTL_MINUTES=10`: one-time Telegram login link lifetime.
 - `TELEGRAM_WEBAPP_URL=https://l1n.pp.ua/telegram`: public HTTPS Mini App URL.
+- `TELEGRAM_WEBHOOK_URL=https://l1n.pp.ua/api/telegram/webhook`: public HTTPS Telegram update endpoint.
+- `TELEGRAM_WEBHOOK_SECRET=`: optional explicit Telegram webhook secret; a derived secret is used when empty.
+- `TELEGRAM_WEBHOOK_MAX_CONNECTIONS=10`: maximum concurrent Telegram webhook deliveries.
 - `TELEGRAM_WEBAPP_AUTH_MAX_AGE_SECONDS=86400`: maximum accepted age of signed Telegram Mini App authentication data.
-- `TELEGRAM_POLL_TIMEOUT_SECONDS=25`: Telegram Bot API long-poll timeout.
 
 ## Verification
 

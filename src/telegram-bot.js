@@ -1,13 +1,10 @@
 import { loadTelegramBotConfig } from "./telegram-bot-config.js";
 import { parseTelegramLinkParameter } from "./telegram.js";
-import { createTelegramWebAppValidator } from "./telegram-webapp.js";
+import { createTelegramBotServer } from "./telegram-webapp.js";
 
 const config = loadTelegramBotConfig();
 const telegramApiUrl = `https://api.telegram.org/bot${config.botToken}`;
-let nextUpdateId = 0;
-let stopping = false;
-let activeRequestController;
-let validatorServer;
+let botServer;
 
 class InternalApiError extends Error {
   constructor(message, status) {
@@ -29,13 +26,12 @@ function compactUrl(value, length = 120) {
   return text.length <= length ? text : `${text.slice(0, length - 1)}…`;
 }
 
-async function telegram(method, payload = {}, signal) {
-  const timeoutSignal = AbortSignal.timeout((config.pollTimeoutSeconds + 10) * 1_000);
+async function telegram(method, payload = {}) {
   const response = await fetch(`${telegramApiUrl}/${method}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
-    signal: signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal,
+    signal: AbortSignal.timeout(20_000),
   });
   const data = await response.json();
   if (!response.ok || !data.ok) {
@@ -358,32 +354,19 @@ async function handleUpdate(update) {
   }
 }
 
-async function poll() {
-  while (!stopping) {
-    activeRequestController = new AbortController();
-    try {
-      const updates = await telegram("getUpdates", {
-        offset: nextUpdateId,
-        timeout: config.pollTimeoutSeconds,
-        allowed_updates: ["message", "callback_query"],
-      }, activeRequestController.signal);
-      for (const update of updates) {
-        nextUpdateId = Math.max(nextUpdateId, update.update_id + 1);
-        await handleUpdate(update);
-      }
-    } catch (error) {
-      if (stopping) break;
-      console.error("Telegram polling failed:", error.message);
-      await new Promise((resolve) => setTimeout(resolve, 2_000));
-    } finally {
-      activeRequestController = undefined;
-    }
-  }
-}
-
 async function main() {
   const bot = await telegram("getMe");
-  await telegram("deleteWebhook", { drop_pending_updates: false });
+  botServer = createTelegramBotServer({
+    botToken: config.botToken,
+    internalSecret: config.internalSecret,
+    maxAgeSeconds: config.webAppAuthMaxAgeSeconds,
+    webhookSecret: config.webhookSecret,
+    handleWebhookUpdate: handleUpdate,
+  });
+  await new Promise((resolve, reject) => {
+    botServer.once("error", reject);
+    botServer.listen(config.validatorPort, config.validatorHost, resolve);
+  });
   await telegram("setChatMenuButton", {
     menu_button: {
       type: "web_app",
@@ -408,26 +391,21 @@ async function main() {
       { command: "help", description: "Show commands" },
     ],
   });
-  validatorServer = createTelegramWebAppValidator({
-    botToken: config.botToken,
-    internalSecret: config.internalSecret,
-    maxAgeSeconds: config.webAppAuthMaxAgeSeconds,
-  });
-  await new Promise((resolve, reject) => {
-    validatorServer.once("error", reject);
-    validatorServer.listen(config.validatorPort, config.validatorHost, resolve);
+  await telegram("setWebhook", {
+    url: config.webhookUrl,
+    secret_token: config.webhookSecret,
+    max_connections: config.webhookMaxConnections,
+    allowed_updates: ["message", "callback_query"],
+    drop_pending_updates: false,
   });
   console.log(
-    `Telegram bot @${bot.username} started with long polling and Mini App validation on port ${config.validatorPort}.`,
+    `Telegram bot @${bot.username} started with webhook ${config.webhookUrl} and Mini App validation on port ${config.validatorPort}.`,
   );
-  await poll();
 }
 
 function shutdown(signal) {
   console.log(`Received ${signal}, stopping Telegram bot...`);
-  stopping = true;
-  activeRequestController?.abort();
-  validatorServer?.close();
+  botServer?.close();
 }
 
 process.on("SIGINT", () => shutdown("SIGINT"));
@@ -435,5 +413,6 @@ process.on("SIGTERM", () => shutdown("SIGTERM"));
 
 main().catch((error) => {
   console.error("Failed to start Telegram bot:", error.message);
+  botServer?.close();
   process.exitCode = 1;
 });
