@@ -70,6 +70,38 @@ async function copyText(value) {
   telegram?.HapticFeedback?.notificationOccurred("success");
 }
 
+function copyLinkIcon(value) {
+  const element = document.createElement("button");
+  element.type = "button";
+  element.className = "copy-link-icon";
+  element.title = "Copy short URL";
+  element.setAttribute("aria-label", "Copy short URL");
+
+  const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  icon.setAttribute("viewBox", "0 0 24 24");
+  icon.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", "M8 7V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M5 8h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2Z");
+  icon.append(path);
+  element.append(icon);
+  element.addEventListener("click", async () => {
+    try {
+      await copyText(value);
+      element.classList.add("copied");
+      element.title = "Copied";
+      element.setAttribute("aria-label", "Short URL copied");
+      window.setTimeout(() => {
+        element.classList.remove("copied");
+        element.title = "Copy short URL";
+        element.setAttribute("aria-label", "Copy short URL");
+      }, 1200);
+    } catch (error) {
+      setMessage(linksMessage, error.message, true);
+    }
+  });
+  return element;
+}
+
 function confirmAction(message) {
   if (telegram?.showConfirm) {
     return new Promise((resolve) => telegram.showConfirm(message, resolve));
@@ -187,9 +219,15 @@ function renderLink(link) {
   status.textContent = link.active ? "Active" : "Disabled";
   titleRow.append(title, status);
 
-  const shortUrl = document.createElement("span");
+  const shortUrlRow = document.createElement("div");
+  shortUrlRow.className = "short-url-row";
+  const shortUrl = document.createElement("a");
   shortUrl.className = "short-url";
+  shortUrl.href = link.shortUrl;
+  shortUrl.target = "_blank";
+  shortUrl.rel = "noopener noreferrer";
   shortUrl.textContent = link.shortUrl;
+  shortUrlRow.append(shortUrl, copyLinkIcon(link.shortUrl));
   const destination = document.createElement("span");
   destination.className = "destination";
   destination.textContent = `→ ${link.targetUrl}`;
@@ -200,13 +238,12 @@ function renderLink(link) {
   const actions = document.createElement("div");
   actions.className = "link-actions";
   actions.append(
-    button("Copy", () => copyText(link.shortUrl).catch((error) => setMessage(linksMessage, error.message, true))),
     button("Stats", () => showStatistics(link)),
     button("Edit", () => openEditor(link)),
     button(link.active ? "Disable" : "Enable", () => toggleLink(link)),
     button("Delete", () => deleteLink(link), "danger"),
   );
-  card.append(titleRow, shortUrl, destination, meta, actions);
+  card.append(titleRow, shortUrlRow, destination, meta, actions);
   return card;
 }
 
