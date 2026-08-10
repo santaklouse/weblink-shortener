@@ -129,6 +129,12 @@ For `@weblink_shortener_bot`, use these exact settings in [@BotFather](https://t
 
 The bot also calls `setChatMenuButton` during startup, so step 4 is restored automatically after each deployment. Configuring the Main Mini App in step 2 is still recommended because it adds a prominent launch button to the bot profile.
 
+If the bot log reports `Conflict: terminated by other getUpdates request`, another process is using the same token. Stop the other process or send `/token` to BotFather, select `@weblink_shortener_bot`, generate a replacement token, save it as `TELEGRAM_BOT_TOKEN` in `.env`, and recreate the bot container:
+
+```bash
+docker compose --profile telegram up -d --force-recreate telegram-bot
+```
+
 Start the Telegram profile:
 
 ```bash
