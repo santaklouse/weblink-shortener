@@ -105,6 +105,7 @@ for (const button of document.querySelectorAll(".copy-url-button")) {
 }
 
 function renderAnalytics(analytics) {
+  document.querySelector("#privacy-note").hidden = analytics.sensitiveDataHidden !== true;
   document.querySelector("#total-clicks").textContent = String(analytics.totals.clicks);
   document.querySelector("#unique-visitors").textContent = String(analytics.totals.uniqueVisitors);
   document.querySelector("#recorded-events").textContent = String(analytics.totals.recordedEvents);

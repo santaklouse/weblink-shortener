@@ -18,9 +18,9 @@ A minimal Node.js URL shortener with PocketBase running behind the application.
 - Custom slugs are available only to registered users and must be unique.
 - Registered owners can enable, disable, and delete their links.
 - Clicks are incremented atomically.
-- Detailed analytics include country, referrer, masked visitor network, device, browser, operating system, recent click time, and expandable sanitized HTTP request metadata.
+- Detailed analytics include country, referrer, visitor address, device, browser, operating system, recent click time, and expandable HTTP request metadata.
 - Open statistics pages refresh their data in the background every 10 seconds without a page reload.
-- Unique visitors are counted with a keyed hash; full IP addresses are never stored.
+- Unique visitors are counted with a keyed hash; sensitive request data can be redacted from statistics output.
 - PocketBase Dashboard is available on a separate administrator hostname.
 - The public hostname proxies only to Node.js. PocketBase credentials and API calls are never exposed to the browser.
 
@@ -286,9 +286,9 @@ When all public traffic is guaranteed to pass through Cloudflare, enable IP Geol
 TRUST_CLOUDFLARE_HEADERS=true
 ```
 
-This trusts `CF-IPCountry` for the country and `CF-Connecting-IP` for privacy-masked visitor analytics. Do not enable it while clients can connect directly to the origin, because direct clients could spoof these headers.
+This trusts `CF-IPCountry` for the country and `CF-Connecting-IP` for visitor analytics. Do not enable it while clients can connect directly to the origin, because direct clients could spoof these headers.
 
-Each newly recorded click also stores the request method, protocol, host, path, HTTP version, and request headers for the expandable event view. Authorization credentials, cookies, token/secret/key/password headers, sensitive query parameters, and headers containing the full client IP are redacted before the event is written to PocketBase. Header data is bounded to prevent oversized analytics records.
+Each newly recorded click stores the visitor IP address, request method, protocol, host, path, HTTP version, and request headers in PocketBase. Set `HIDE_SENSITIVE_HEADERS=true` to mask visitor IP addresses and redact authorization credentials, cookies, token/secret/key/password headers, sensitive query parameters, and headers containing the full client IP only when the statistics API response is built. Set it to `false` to return the stored values unchanged. Header data is bounded to prevent oversized analytics records.
 
 Cloudflare Tunnel deployments that route through the included Nginx proxy must enable this setting. Otherwise, click analytics see the intermediate Docker network and may display an address such as `172.18.0.0`. Recreate the application container after changing the value:
 
@@ -296,7 +296,7 @@ Cloudflare Tunnel deployments that route through the included Nginx proxy must e
 docker compose up -d --no-deps --force-recreate app
 ```
 
-Full visitor IPs are never stored. IPv4 addresses are masked to `/24`, IPv6 addresses to `/48`, and unique visitors are derived with `HMAC-SHA256` using `ANALYTICS_HASH_SECRET`. Referrer URLs may contain query parameters, so the statistics URL should be treated as a secret for anonymous links.
+Full visitor IPs are stored for new click events. When `HIDE_SENSITIVE_HEADERS=true`, IPv4 addresses are masked to `/24` and IPv6 addresses to `/48` in API responses. Unique visitors are derived with `HMAC-SHA256` using `ANALYTICS_HASH_SECRET`. Referrer URLs and stored request metadata may contain sensitive values, so PocketBase access and statistics URLs should be treated as secrets.
 
 ## Access model
 
@@ -360,6 +360,7 @@ Set either `POCKETBASE_TOKEN` or both `POCKETBASE_SUPERUSER_EMAIL` and `POCKETBA
 - `ANALYTICS_RECENT_EVENTS=50`: number of recent clicks returned by the API.
 - `GEOIP_DB_PATH=/geoip/GeoLite2-Country.mmdb`: local MaxMind database path.
 - `TRUST_CLOUDFLARE_HEADERS=false`: trust Cloudflare location and visitor-IP headers.
+- `HIDE_SENSITIVE_HEADERS=true`: redact sensitive headers, query parameters, and full visitor IP addresses in statistics API responses.
 - `TELEGRAM_LINK_TTL_MINUTES=10`: one-time Telegram login link lifetime.
 - `TELEGRAM_WEBAPP_URL=https://l1n.pp.ua/telegram`: public HTTPS Mini App URL.
 - `TELEGRAM_WEBAPP_AUTH_MAX_AGE_SECONDS=86400`: maximum accepted age of signed Telegram Mini App authentication data.

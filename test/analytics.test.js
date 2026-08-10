@@ -3,10 +3,12 @@ import test from "node:test";
 import {
   buildAnalytics,
   captureClickDetails,
+  captureRequestHeaders,
   hashVisitor,
   maskIpAddress,
   normalizeReferrer,
   parseUserAgent,
+  sanitizeRequestPath,
   sanitizeRequestHeaders,
 } from "../src/analytics.js";
 
@@ -39,7 +41,7 @@ test("classifies common browser, operating system, and device values", () => {
   assert.deepEqual(chromeAndroid, { device: "Mobile", browser: "Chrome", os: "Android" });
 });
 
-test("captures request metadata while redacting credentials and full client IP headers", async () => {
+test("captures original request metadata before output redaction", async () => {
   const headers = {
     accept: "text/html",
     authorization: "Bearer visitor-secret-token",
@@ -69,22 +71,34 @@ test("captures request metadata while redacting credentials and full client IP h
   assert.equal(details.requestMethod, "GET");
   assert.equal(details.requestProtocol, "https");
   assert.equal(details.requestHost, "app.example.com");
-  assert.equal(details.requestPath, "/docs?utm_source=newsletter&token=%5Bredacted%5D");
+  assert.equal(details.ipAddress, "203.0.113.74");
+  assert.equal(details.requestPath, "/docs?utm_source=newsletter&token=private-value");
   assert.equal(details.httpVersion, "1.1");
-  assert.equal(details.requestHeaders.authorization, "[redacted]");
-  assert.equal(details.requestHeaders.cookie, "[redacted]");
-  assert.equal(details.requestHeaders["cf-warp-tag-id"], "[redacted for privacy]");
-  assert.equal(details.requestHeaders["x-forwarded-for"], "[redacted for privacy]");
-  assert.equal(JSON.stringify(details).includes("visitor-secret-token"), false);
-  assert.equal(JSON.stringify(details).includes("visitor-session-token"), false);
-  assert.equal(JSON.stringify(details).includes("visitor-warp-identifier"), false);
-  assert.equal(JSON.stringify(details).includes("private-value"), false);
+  assert.equal(details.requestHeaders.authorization, "Bearer visitor-secret-token");
+  assert.equal(details.requestHeaders.cookie, "weblink_session=visitor-session-token");
+  assert.equal(details.requestHeaders["cf-warp-tag-id"], "visitor-warp-identifier");
+  assert.equal(details.requestHeaders["x-forwarded-for"], "203.0.113.74");
 });
 
-test("normalizes request header names and values", () => {
+test("normalizes captured request headers and redacts only when requested", () => {
   assert.deepEqual(
-    sanitizeRequestHeaders({ "X-Custom Header": "line one\nline two", "X-API-Key": "secret" }),
-    { "x-customheader": "line one line two", "x-api-key": "[redacted]" },
+    captureRequestHeaders({ "X-Custom Header": "line one\nline two", "X-API-Key": "secret" }),
+    { "x-customheader": "line one line two", "x-api-key": "secret" },
+  );
+  assert.deepEqual(sanitizeRequestHeaders({ authorization: "Bearer secret", accept: "text/html" }), {
+    accept: "text/html",
+    authorization: "[redacted]",
+  });
+  assert.deepEqual(sanitizeRequestHeaders({ authorization: "Bearer secret" }, false), {
+    authorization: "Bearer secret",
+  });
+  assert.equal(
+    sanitizeRequestPath("/docs?token=private-value&utm_source=newsletter"),
+    "/docs?token=%5Bredacted%5D&utm_source=newsletter",
+  );
+  assert.equal(
+    sanitizeRequestPath("/docs?token=private-value&utm_source=newsletter", false),
+    "/docs?token=private-value&utm_source=newsletter",
   );
 });
 
@@ -115,16 +129,20 @@ test("aggregates detailed click analytics", () => {
       countryCode: "US",
       referrerHost: "news.example.com",
       referrer: "https://news.example.com/story",
-      ipAddress: "203.0.113.0",
+      ipAddress: "203.0.113.74",
       device: "Mobile",
       browser: "Chrome",
       os: "Android",
       requestMethod: "GET",
       requestProtocol: "https",
       requestHost: "app.example.com",
-      requestPath: "/short",
+      requestPath: "/short?token=private-value",
       httpVersion: "1.1",
-      requestHeaders: { accept: "text/html" },
+      requestHeaders: {
+        accept: "text/html",
+        authorization: "Bearer visitor-secret-token",
+        "x-forwarded-for": "203.0.113.74",
+      },
     },
     {
       created: "2026-08-09T09:00:00Z",
@@ -143,12 +161,29 @@ test("aggregates detailed click analytics", () => {
   assert.equal(analytics.countries[0].code, "US");
   assert.equal(analytics.countries[0].clicks, 2);
   assert.equal(analytics.recentClicks.length, 2);
+  assert.equal(analytics.sensitiveDataHidden, true);
+  assert.equal(analytics.recentClicks[0].ipAddress, "203.0.113.0");
   assert.deepEqual(analytics.recentClicks[0].request, {
     method: "GET",
     protocol: "https",
     host: "app.example.com",
-    path: "/short",
+    path: "/short?token=%5Bredacted%5D",
     httpVersion: "1.1",
-    headers: { accept: "text/html" },
+    headers: {
+      accept: "text/html",
+      authorization: "[redacted]",
+      "x-forwarded-for": "[redacted for privacy]",
+    },
   });
+
+  const originalAnalytics = buildAnalytics(events, 2, 10, events, {
+    hideSensitiveHeaders: false,
+  });
+  assert.equal(originalAnalytics.sensitiveDataHidden, false);
+  assert.equal(originalAnalytics.recentClicks[0].ipAddress, "203.0.113.74");
+  assert.equal(originalAnalytics.recentClicks[0].request.path, "/short?token=private-value");
+  assert.equal(
+    originalAnalytics.recentClicks[0].request.headers.authorization,
+    "Bearer visitor-secret-token",
+  );
 });

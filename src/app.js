@@ -898,7 +898,9 @@ export function createApp({
           fields: "countryCode,referrerHost,visitorHash,device,browser,os",
         },
       );
-      const analytics = buildAnalytics(events.items, record.clicks, 0, []);
+      const analytics = buildAnalytics(events.items, record.clicks, 0, [], {
+        hideSensitiveHeaders: config.hideSensitiveHeaders,
+      });
       const baseUrl = getPublicBaseUrl(request, config.publicBaseUrl);
       return response.json({
         link: {
@@ -1076,7 +1078,9 @@ export function createApp({
           fields: "countryCode,referrerHost,visitorHash,device,browser,os",
         },
       );
-      const analytics = buildAnalytics(events.items, record.clicks, 0, []);
+      const analytics = buildAnalytics(events.items, record.clicks, 0, [], {
+        hideSensitiveHeaders: config.hideSensitiveHeaders,
+      });
       const baseUrl = getPublicBaseUrl(request, config.publicBaseUrl);
       return response.json({
         link: {
@@ -1274,6 +1278,7 @@ export function createApp({
           record.clicks,
           config.analyticsRecentEvents,
           recentEventsPage.items,
+          { hideSensitiveHeaders: config.hideSensitiveHeaders },
         ),
       });
     } catch (error) {
