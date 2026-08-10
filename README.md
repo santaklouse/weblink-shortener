@@ -15,7 +15,7 @@ A minimal Node.js URL shortener with PocketBase running behind the application.
 - Custom slugs are available only to registered users and must be unique.
 - Registered owners can enable, disable, and delete their links.
 - Clicks are incremented atomically.
-- Detailed analytics include country, referrer, masked visitor network, device, browser, operating system, and recent click time.
+- Detailed analytics include country, referrer, masked visitor network, device, browser, operating system, recent click time, and expandable sanitized HTTP request metadata.
 - Open statistics pages refresh their data in the background every 10 seconds without a page reload.
 - Unique visitors are counted with a keyed hash; full IP addresses are never stored.
 - PocketBase Dashboard is available on a separate administrator hostname.
@@ -173,6 +173,8 @@ TRUST_CLOUDFLARE_HEADERS=true
 ```
 
 This trusts `CF-IPCountry` for the country and `CF-Connecting-IP` for privacy-masked visitor analytics. Do not enable it while clients can connect directly to the origin, because direct clients could spoof these headers.
+
+Each newly recorded click also stores the request method, protocol, host, path, HTTP version, and request headers for the expandable event view. Authorization credentials, cookies, token/secret/key/password headers, sensitive query parameters, and headers containing the full client IP are redacted before the event is written to PocketBase. Header data is bounded to prevent oversized analytics records.
 
 Cloudflare Tunnel deployments that route through the included Nginx proxy must enable this setting. Otherwise, click analytics see the intermediate Docker network and may display an address such as `172.18.0.0`. Recreate the application container after changing the value:
 

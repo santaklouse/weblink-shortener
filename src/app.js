@@ -628,17 +628,30 @@ export function createApp({
         fields: "id,slug,url,clicks,active,created,expiresAt",
       });
       const eventsFilter = client.filter("link = {:link}", { link: record.id });
-      const eventsPage = await client.collection(CLICK_EVENTS_COLLECTION).getList(
-        1,
-        config.analyticsMaxEvents,
-        {
-          filter: eventsFilter,
-          sort: "-created",
-          skipTotal: true,
-          fields:
-            "countryCode,referrer,referrerHost,ipAddress,visitorHash,device,browser,os,created",
-        },
-      );
+      const [eventsPage, recentEventsPage] = await Promise.all([
+        client.collection(CLICK_EVENTS_COLLECTION).getList(
+          1,
+          config.analyticsMaxEvents,
+          {
+            filter: eventsFilter,
+            sort: "-created",
+            skipTotal: true,
+            fields:
+              "countryCode,referrerHost,visitorHash,device,browser,os",
+          },
+        ),
+        client.collection(CLICK_EVENTS_COLLECTION).getList(
+          1,
+          config.analyticsRecentEvents,
+          {
+            filter: eventsFilter,
+            sort: "-created",
+            skipTotal: true,
+            fields:
+              "id,countryCode,referrer,referrerHost,ipAddress,device,browser,os,requestMethod,requestProtocol,requestHost,requestPath,httpVersion,requestHeaders,created",
+          },
+        ),
+      ]);
       const baseUrl = getPublicBaseUrl(request, config.publicBaseUrl);
       const expired = Boolean(record.expiresAt && new Date(record.expiresAt) <= new Date());
       return response.json({
@@ -655,6 +668,7 @@ export function createApp({
           eventsPage.items,
           record.clicks,
           config.analyticsRecentEvents,
+          recentEventsPage.items,
         ),
       });
     } catch (error) {

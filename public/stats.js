@@ -6,6 +6,7 @@ const refreshIntervalMs = 10_000;
 let refreshTimer;
 let requestInFlight = false;
 let hasLoadedStats = false;
+const expandedClickIds = new Set();
 
 function scheduleRefresh() {
   window.clearTimeout(refreshTimer);
@@ -114,20 +115,156 @@ function renderAnalytics(analytics) {
   renderBreakdown("#browsers-body", analytics.browsers, (item) => item.name);
   renderBreakdown("#os-body", analytics.operatingSystems, (item) => item.name);
 
-  const recentRows = analytics.recentClicks.map((click) => {
-    const row = document.createElement("tr");
-    row.append(
-      cell(new Date(click.occurredAt).toLocaleString("en-US")),
+  const recentRows = analytics.recentClicks.flatMap((click, index) => {
+    const clickId = click.id || `${click.occurredAt}-${index}`;
+    const detailId = `click-details-${clickId.replace(/[^A-Za-z0-9_-]/g, "-")}`;
+    const summaryRow = document.createElement("tr");
+    summaryRow.className = "click-summary-row";
+
+    const timeCell = document.createElement("td");
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "click-details-toggle";
+    toggle.setAttribute("aria-controls", detailId);
+    toggle.append(
+      requestChevron(),
+      document.createTextNode(new Date(click.occurredAt).toLocaleString("en-US")),
+    );
+    timeCell.append(toggle);
+
+    summaryRow.append(
+      timeCell,
       cell(`${click.country} (${click.countryCode})`),
       referrerCell(click),
       cell(click.ipAddress),
       cell(`${click.device} · ${click.browser} · ${click.os}`),
     );
-    return row;
+    const detailsRow = requestDetailsRow(click, detailId);
+
+    const setExpanded = (expanded) => {
+      toggle.setAttribute("aria-expanded", String(expanded));
+      detailsRow.hidden = !expanded;
+      summaryRow.classList.toggle("expanded", expanded);
+      if (expanded) expandedClickIds.add(clickId);
+      else expandedClickIds.delete(clickId);
+    };
+    const toggleExpanded = () => setExpanded(toggle.getAttribute("aria-expanded") !== "true");
+
+    toggle.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleExpanded();
+    });
+    summaryRow.addEventListener("click", (event) => {
+      if (event.target.closest("a, button")) return;
+      toggleExpanded();
+    });
+    setExpanded(expandedClickIds.has(clickId));
+    return [summaryRow, detailsRow];
   });
 
   if (recentRows.length === 0) recentRows.push(emptyRow(5, "No detailed click events yet."));
   document.querySelector("#recent-clicks-body").replaceChildren(...recentRows);
+}
+
+function requestChevron() {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", "m9 6 6 6-6 6");
+  svg.append(path);
+  return svg;
+}
+
+function requestDetailsRow(click, detailId) {
+  const row = document.createElement("tr");
+  row.id = detailId;
+  row.className = "click-details-row";
+
+  const containerCell = document.createElement("td");
+  containerCell.colSpan = 5;
+  const panel = document.createElement("div");
+  panel.className = "request-details-panel";
+
+  const heading = document.createElement("h3");
+  heading.textContent = "Request details";
+  const requestLine = document.createElement("code");
+  requestLine.className = "request-line";
+  requestLine.textContent = formatRequestLine(click.request);
+  panel.append(heading, requestLine, requestMetadata(click));
+
+  const headersHeading = document.createElement("h4");
+  headersHeading.textContent = "Request headers";
+  panel.append(headersHeading, requestHeadersTable(click.request?.headers));
+  containerCell.append(panel);
+  row.append(containerCell);
+  return row;
+}
+
+function formatRequestLine(request = {}) {
+  const method = request.method || "GET";
+  const origin = request.protocol && request.host ? `${request.protocol}://${request.host}` : "";
+  const target = request.path ? `${origin}${request.path}` : "Request target not recorded";
+  const version = request.httpVersion ? ` HTTP/${request.httpVersion}` : "";
+  return `${method} ${target}${version}`;
+}
+
+function requestMetadata(click) {
+  const list = document.createElement("dl");
+  list.className = "request-metadata";
+  const entries = [
+    ["Event ID", click.id || "Not recorded"],
+    ["Occurred", new Date(click.occurredAt).toLocaleString("en-US")],
+    ["Country", `${click.country} (${click.countryCode})`],
+    ["Visitor address", click.ipAddress],
+    ["Referrer", click.referrer || "Direct"],
+    ["Client", `${click.device} · ${click.browser} · ${click.os}`],
+  ];
+
+  for (const [term, value] of entries) {
+    const group = document.createElement("div");
+    const dt = document.createElement("dt");
+    dt.textContent = term;
+    const dd = document.createElement("dd");
+    dd.textContent = value;
+    group.append(dt, dd);
+    list.append(group);
+  }
+  return list;
+}
+
+function requestHeadersTable(headers) {
+  const entries = headers && typeof headers === "object"
+    ? Object.entries(headers).sort(([left], [right]) => left.localeCompare(right))
+    : [];
+  if (entries.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "request-headers-empty";
+    empty.textContent = "No request headers were recorded for this event.";
+    return empty;
+  }
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "request-headers-wrap";
+  const table = document.createElement("table");
+  const head = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  const nameHeading = document.createElement("th");
+  nameHeading.textContent = "Header";
+  const valueHeading = document.createElement("th");
+  valueHeading.textContent = "Value";
+  headRow.append(nameHeading, valueHeading);
+  head.append(headRow);
+
+  const body = document.createElement("tbody");
+  for (const [name, value] of entries) {
+    const row = document.createElement("tr");
+    row.append(cell(name), cell(String(value)));
+    body.append(row);
+  }
+  table.append(head, body);
+  wrapper.append(table);
+  return wrapper;
 }
 
 function renderBreakdown(selector, items, label) {

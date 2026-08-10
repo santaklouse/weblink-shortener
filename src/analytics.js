@@ -2,6 +2,22 @@ import { createHmac } from "node:crypto";
 import { isIP } from "node:net";
 
 const countryNames = new Intl.DisplayNames(["en"], { type: "region" });
+const MAX_CAPTURED_HEADERS = 64;
+const MAX_HEADER_NAME_LENGTH = 128;
+const MAX_HEADER_VALUE_LENGTH = 2_048;
+const MAX_HEADERS_SIZE = 24 * 1_024;
+const SENSITIVE_HEADER_PATTERN = /(?:authorization|cookie|token|secret|password|api[-_]?key)/i;
+const CLIENT_IP_HEADERS = new Set([
+  "cf-connecting-ip",
+  "cf-warp-tag-id",
+  "client-ip",
+  "forwarded",
+  "true-client-ip",
+  "x-client-ip",
+  "x-forwarded-for",
+  "x-real-ip",
+]);
+const SENSITIVE_QUERY_PATTERN = /(?:access|auth|code|credential|key|password|secret|session|token)/i;
 
 export async function captureClickDetails(request, config, geoIpResolver) {
   const ipAddress = getClientIp(request, config.trustCloudflareHeaders);
@@ -18,7 +34,96 @@ export async function captureClickDetails(request, config, geoIpResolver) {
     device: userAgent.device,
     browser: userAgent.browser,
     os: userAgent.os,
+    requestMethod: normalizeRequestMethod(request.method),
+    requestProtocol: getRequestProtocol(request, config.trustCloudflareHeaders),
+    requestHost: normalizeRequestHost(request.get("host")),
+    requestPath: normalizeRequestPath(request.originalUrl || request.url),
+    httpVersion: normalizeHttpVersion(request.httpVersion),
+    requestHeaders: sanitizeRequestHeaders(request.headers),
   };
+}
+
+function getRequestProtocol(request, trustCloudflareHeaders) {
+  if (trustCloudflareHeaders) {
+    try {
+      const cloudflareVisitor = JSON.parse(request.get("cf-visitor") || "{}");
+      if (cloudflareVisitor.scheme === "http" || cloudflareVisitor.scheme === "https") {
+        return cloudflareVisitor.scheme;
+      }
+    } catch {
+      // Fall back to Express' normalized protocol when Cloudflare metadata is unavailable.
+    }
+  }
+  return normalizeRequestProtocol(request.protocol);
+}
+
+export function sanitizeRequestHeaders(headers) {
+  if (!headers || typeof headers !== "object" || Array.isArray(headers)) return {};
+
+  const sanitized = {};
+  let capturedSize = 2;
+  const entries = Object.entries(headers)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .slice(0, MAX_CAPTURED_HEADERS);
+
+  for (const [rawName, rawValue] of entries) {
+    const name = String(rawName)
+      .toLowerCase()
+      .replace(/[^a-z0-9!#$%&'*+.^_`|~-]/g, "")
+      .slice(0, MAX_HEADER_NAME_LENGTH);
+    if (!name) continue;
+
+    let value;
+    if (SENSITIVE_HEADER_PATTERN.test(name)) {
+      value = "[redacted]";
+    } else if (CLIENT_IP_HEADERS.has(name)) {
+      value = "[redacted for privacy]";
+    } else {
+      const joined = Array.isArray(rawValue) ? rawValue.join(", ") : String(rawValue ?? "");
+      value = joined.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, MAX_HEADER_VALUE_LENGTH);
+    }
+
+    const entrySize = Buffer.byteLength(JSON.stringify(name)) + Buffer.byteLength(JSON.stringify(value)) + 2;
+    if (capturedSize + entrySize > MAX_HEADERS_SIZE) break;
+    sanitized[name] = value;
+    capturedSize += entrySize;
+  }
+
+  return sanitized;
+}
+
+function normalizeRequestMethod(value) {
+  if (typeof value !== "string") return "GET";
+  return value.toUpperCase().replace(/[^A-Z-]/g, "").slice(0, 16) || "GET";
+}
+
+function normalizeRequestProtocol(value) {
+  if (typeof value !== "string") return "http";
+  return value.toLowerCase().replace(/[^a-z0-9+.-]/g, "").slice(0, 16) || "http";
+}
+
+function normalizeRequestHost(value) {
+  if (typeof value !== "string") return "";
+  return value.replace(/[\u0000-\u0020\u007f]/g, "").slice(0, 255);
+}
+
+function normalizeRequestPath(value) {
+  if (typeof value !== "string" || !value.startsWith("/")) return "/";
+
+  try {
+    const parsed = new URL(value, "http://analytics.invalid");
+    for (const name of [...new Set(parsed.searchParams.keys())]) {
+      if (SENSITIVE_QUERY_PATTERN.test(name)) parsed.searchParams.set(name, "[redacted]");
+    }
+    return `${parsed.pathname}${parsed.search}`.slice(0, 2_048);
+  } catch {
+    return value.slice(0, 2_048);
+  }
+}
+
+function normalizeHttpVersion(value) {
+  if (typeof value !== "string") return "";
+  return value.replace(/[^0-9.]/g, "").slice(0, 16);
 }
 
 export function getClientIp(request, trustCloudflareHeaders = false) {
@@ -119,7 +224,7 @@ export function countryName(code) {
   }
 }
 
-export function buildAnalytics(events, totalClicks, recentLimit = 50) {
+export function buildAnalytics(events, totalClicks, recentLimit = 50, recentEvents = events) {
   const uniqueVisitors = new Set();
   const countries = new Map();
   const referrers = new Map();
@@ -151,7 +256,8 @@ export function buildAnalytics(events, totalClicks, recentLimit = 50) {
     devices: sortedBreakdown(devices),
     browsers: sortedBreakdown(browsers),
     operatingSystems: sortedBreakdown(operatingSystems),
-    recentClicks: events.slice(0, recentLimit).map((event) => ({
+    recentClicks: recentEvents.slice(0, recentLimit).map((event) => ({
+      id: event.id,
       occurredAt: event.created,
       countryCode: event.countryCode || "XX",
       country: countryName(event.countryCode),
@@ -161,6 +267,17 @@ export function buildAnalytics(events, totalClicks, recentLimit = 50) {
       device: event.device || "Other",
       browser: event.browser || "Other",
       os: event.os || "Other",
+      request: {
+        method: event.requestMethod || "GET",
+        protocol: event.requestProtocol || "",
+        host: event.requestHost || "",
+        path: event.requestPath || "",
+        httpVersion: event.httpVersion || "",
+        headers:
+          event.requestHeaders && typeof event.requestHeaders === "object"
+            ? event.requestHeaders
+            : {},
+      },
     })),
   };
 }

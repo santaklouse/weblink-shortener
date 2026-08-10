@@ -275,9 +275,75 @@ async function ensureLinksCollection(usersCollection) {
   return created;
 }
 
+function requestAnalyticsFields() {
+  return [
+    {
+      name: "requestMethod",
+      type: "text",
+      required: false,
+      min: 0,
+      max: 16,
+      pattern: "^[A-Z-]*$",
+      autogeneratePattern: "",
+    },
+    {
+      name: "requestProtocol",
+      type: "text",
+      required: false,
+      min: 0,
+      max: 16,
+      pattern: "^[a-z0-9+.-]*$",
+      autogeneratePattern: "",
+    },
+    {
+      name: "requestHost",
+      type: "text",
+      required: false,
+      min: 0,
+      max: 255,
+      pattern: "",
+      autogeneratePattern: "",
+    },
+    {
+      name: "requestPath",
+      type: "text",
+      required: false,
+      min: 0,
+      max: 2_048,
+      pattern: "",
+      autogeneratePattern: "",
+    },
+    {
+      name: "httpVersion",
+      type: "text",
+      required: false,
+      min: 0,
+      max: 16,
+      pattern: "^[0-9.]*$",
+      autogeneratePattern: "",
+    },
+    {
+      name: "requestHeaders",
+      type: "json",
+      required: false,
+      maxSize: 32 * 1_024,
+    },
+  ];
+}
+
 async function ensureClickEventsCollection(linksCollection) {
   const existing = await findCollection(CLICK_EVENTS_COLLECTION);
   if (existing) {
+    const fieldNames = new Set(existing.fields.map((field) => field.name));
+    const additions = requestAnalyticsFields().filter((field) => !fieldNames.has(field.name));
+    if (additions.length > 0) {
+      await client.collections.update(existing.id, {
+        fields: [...existing.fields, ...additions],
+      });
+      console.log(`Collection schema ${CLICK_EVENTS_COLLECTION} updated.`);
+      return findCollection(CLICK_EVENTS_COLLECTION);
+    }
+
     console.log(`Collection ${CLICK_EVENTS_COLLECTION} already exists; no changes required.`);
     return existing;
   }
@@ -374,6 +440,7 @@ async function ensureClickEventsCollection(linksCollection) {
         pattern: "",
         autogeneratePattern: "",
       },
+      ...requestAnalyticsFields(),
       {
         name: "created",
         type: "autodate",
