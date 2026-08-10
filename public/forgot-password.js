@@ -6,7 +6,7 @@ form.addEventListener("submit", async (event) => {
   event.preventDefault();
   message.textContent = "";
   message.classList.remove("error");
-  const button = form.querySelector("button");
+  const button = form.querySelector('button[type="submit"]');
   button.disabled = true;
 
   try {

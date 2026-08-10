@@ -5,8 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="A simple URL shortener with click statistics" />
     <title>Short URL</title>
-    <link rel="stylesheet" href="/styles.css?v=9" />
+    <link rel="stylesheet" href="/styles.css?v=10" />
     <script src="/app.js?v=5" defer></script>
+    <script src="/password-visibility.js?v=1" defer></script>
   </head>
   <body>
     <main class="shell">
@@ -64,7 +65,7 @@
               <label for="login-email">Email</label>
               <input id="login-email" name="email" type="email" autocomplete="email" required />
               <label for="login-password">Password</label>
-              <input id="login-password" name="password" type="password" autocomplete="current-password" minlength="8" required />
+              <input id="login-password" name="password" type="password" autocomplete="current-password" minlength="8" data-password-toggle required />
               <a class="forgot-password-link" href="/forgot-password">Forgot password?</a>
               <button type="submit">Sign in</button>
               <p class="message" role="status" aria-live="polite"></p>
@@ -75,7 +76,7 @@
               <label for="register-email">Email</label>
               <input id="register-email" name="email" type="email" autocomplete="email" required />
               <label for="register-password">Password</label>
-              <input id="register-password" name="password" type="password" autocomplete="new-password" minlength="8" maxlength="72" required />
+              <input id="register-password" name="password" type="password" autocomplete="new-password" minlength="8" maxlength="72" data-password-toggle required />
               <button type="submit">Register</button>
               <p class="message" role="status" aria-live="polite"></p>
             </form>

@@ -86,7 +86,7 @@ function bindAuthForm(selector, endpoint) {
     event.preventDefault();
     message.textContent = "";
     message.classList.remove("error");
-    const button = form.querySelector("button");
+    const button = form.querySelector('button[type="submit"]');
     button.disabled = true;
     try {
       const values = new FormData(form);
