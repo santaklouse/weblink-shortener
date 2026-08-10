@@ -6,10 +6,13 @@ import { rateLimit } from "express-rate-limit";
 import helmet from "helmet";
 import { buildAnalytics, captureClickDetails } from "./analytics.js";
 import {
+  normalizeEmailChangeConfirmation,
+  normalizeEmailVerificationConfirmation,
   normalizeLogin,
   normalizePasswordResetConfirmation,
   normalizePasswordResetRequest,
   normalizeRegistration,
+  normalizeVerificationRequest,
   publicUser,
 } from "./auth.js";
 import {
@@ -37,8 +40,10 @@ import {
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const publicDirectory = path.resolve(currentDirectory, "../public");
 
-function clientError(response, message, status = 400) {
-  return response.status(status).json({ error: message });
+function clientError(response, message, status = 400, code) {
+  const body = { error: message };
+  if (code) body.code = code;
+  return response.status(status).json(body);
 }
 
 function sessionCookieOptions(config) {
@@ -184,6 +189,18 @@ export function createApp({
     try {
       const userClient = userClientFactory(token);
       const auth = await userClient.collection(USERS_COLLECTION).authRefresh();
+      if (!auth.record.verified) {
+        clearSession(response, config);
+        if (required) {
+          return clientError(
+            response,
+            "Verify your email before signing in",
+            403,
+            "email_verification_required",
+          );
+        }
+        return next();
+      }
       request.user = auth.record;
       setSession(response, config, auth.token);
       return next();
@@ -224,12 +241,21 @@ export function createApp({
         name: registration.name,
       });
 
+      let verificationEmailSent = true;
       const userClient = userClientFactory();
-      const auth = await userClient
-        .collection(USERS_COLLECTION)
-        .authWithPassword(registration.email, registration.password);
-      setSession(response, config, auth.token);
-      return response.status(201).json({ user: publicUser(auth.record) });
+      try {
+        await userClient
+          .collection(USERS_COLLECTION)
+          .requestVerification(registration.email);
+      } catch (error) {
+        verificationEmailSent = false;
+        logger.warn("Registration verification email failed", error?.message || error);
+      }
+
+      return response.status(201).json({
+        verificationRequired: true,
+        verificationEmailSent,
+      });
     } catch (error) {
       if (error?.response?.data?.email) {
         return clientError(response, "An account with this email already exists", 409);
@@ -246,16 +272,28 @@ export function createApp({
       return clientError(response, error.message);
     }
 
+    const userClient = userClientFactory();
+    let auth;
     try {
-      const userClient = userClientFactory();
-      const auth = await userClient
+      auth = await userClient
         .collection(USERS_COLLECTION)
         .authWithPassword(credentials.email, credentials.password);
-      setSession(response, config, auth.token);
-      return response.json({ user: publicUser(auth.record) });
     } catch {
       return clientError(response, "Incorrect email or password", 401);
     }
+
+    if (!auth.record.verified) {
+      userClient.authStore.clear();
+      return clientError(
+        response,
+        "Verify your email before signing in",
+        403,
+        "email_verification_required",
+      );
+    }
+
+    setSession(response, config, auth.token);
+    return response.json({ user: publicUser(auth.record) });
   });
 
   const getGoogleProvider = async () => {
@@ -332,6 +370,57 @@ export function createApp({
   });
 
   app.post(
+    "/api/auth/resend-verification",
+    passwordResetLimiter,
+    async (request, response) => {
+      let verificationRequest;
+      try {
+        verificationRequest = normalizeVerificationRequest(request.body);
+      } catch (error) {
+        return clientError(response, error.message);
+      }
+
+      try {
+        const userClient = userClientFactory();
+        await userClient
+          .collection(USERS_COLLECTION)
+          .requestVerification(verificationRequest.email);
+      } catch (error) {
+        logger.warn("Email verification request failed", error?.message || error);
+      }
+
+      return response.status(202).json({
+        message: "If an unverified account exists for that email, a verification link has been sent.",
+      });
+    },
+  );
+
+  app.post(
+    "/api/auth/verify-email",
+    apiLimiter,
+    async (request, response, next) => {
+      let confirmation;
+      try {
+        confirmation = normalizeEmailVerificationConfirmation(request.body);
+      } catch (error) {
+        return clientError(response, error.message);
+      }
+
+      try {
+        const userClient = userClientFactory();
+        await userClient
+          .collection(USERS_COLLECTION)
+          .confirmVerification(confirmation.token);
+        clearSession(response, config);
+        return response.status(204).end();
+      } catch (error) {
+        if (!error?.status || error.status >= 500) return next(error);
+        return clientError(response, "This email verification link is invalid or has expired");
+      }
+    },
+  );
+
+  app.post(
     "/api/auth/forgot-password",
     passwordResetLimiter,
     async (request, response) => {
@@ -380,6 +469,32 @@ export function createApp({
       } catch (error) {
         if (!error?.status || error.status >= 500) return next(error);
         return clientError(response, "This password reset link is invalid or has expired");
+      }
+    },
+  );
+
+  app.post(
+    "/api/auth/confirm-email-change",
+    apiLimiter,
+    async (request, response, next) => {
+      let confirmation;
+      try {
+        confirmation = normalizeEmailChangeConfirmation(request.body);
+      } catch (error) {
+        return clientError(response, error.message);
+      }
+
+      try {
+        const userClient = userClientFactory();
+        await userClient.collection(USERS_COLLECTION).confirmEmailChange(
+          confirmation.token,
+          confirmation.password,
+        );
+        clearSession(response, config);
+        return response.status(204).end();
+      } catch (error) {
+        if (!error?.status || error.status >= 500) return next(error);
+        return clientError(response, "This email change link is invalid or has expired");
       }
     },
   );

@@ -25,6 +25,7 @@ async function api(path, options = {}) {
   if (!response.ok) {
     const error = new Error(data?.error || "Request failed");
     error.status = response.status;
+    error.code = data?.code;
     throw error;
   }
   return data;
@@ -82,10 +83,12 @@ function showAuthenticationResult() {
 function bindAuthForm(selector, endpoint) {
   const form = document.querySelector(selector);
   const message = form.querySelector(".message");
+  const verificationLink = form.querySelector("#login-verification-link");
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     message.textContent = "";
     message.classList.remove("error");
+    if (verificationLink) verificationLink.hidden = true;
     const button = form.querySelector('button[type="submit"]');
     button.disabled = true;
     try {
@@ -95,12 +98,21 @@ function bindAuthForm(selector, endpoint) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: values.get("email"), password: values.get("password") }),
       });
+      if (data.verificationRequired) {
+        form.reset();
+        const status = data.verificationEmailSent ? "sent" : "delivery-failed";
+        window.location.assign(`/verify-email?status=${status}`);
+        return;
+      }
       currentUser = data.user;
       form.reset();
       renderSession();
     } catch (error) {
       message.textContent = error.message;
       message.classList.add("error");
+      if (verificationLink && error.code === "email_verification_required") {
+        verificationLink.hidden = false;
+      }
     } finally {
       button.disabled = false;
     }

@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="A simple URL shortener with click statistics" />
     <title>Short URL</title>
-    <link rel="stylesheet" href="/styles.css?v=10" />
-    <script src="/app.js?v=5" defer></script>
+    <link rel="stylesheet" href="/styles.css?v=11" />
+    <script src="/app.js?v=6" defer></script>
     <script src="/password-visibility.js?v=1" defer></script>
   </head>
   <body>
@@ -67,6 +67,7 @@
               <label for="login-password">Password</label>
               <input id="login-password" name="password" type="password" autocomplete="current-password" minlength="8" data-password-toggle required />
               <a class="forgot-password-link" href="/forgot-password">Forgot password?</a>
+              <a id="login-verification-link" class="forgot-password-link" href="/verify-email" hidden>Resend verification email</a>
               <button type="submit">Sign in</button>
               <p class="message" role="status" aria-live="polite"></p>
             </form>

@@ -29,6 +29,8 @@ services:
     environment:
       NODE_ENV: development
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost}
+      APP_DOMAIN: ${APP_DOMAIN:-localhost}
+      ADMIN_DASHBOARD_DOMAIN: ${ADMIN_DASHBOARD_DOMAIN:-pb.localhost}
       POCKETBASE_URL: http://pocketbase:8090
       POCKETBASE_SUPERUSER_EMAIL: ${PB_SUPERUSER_EMAIL:?Set PB_SUPERUSER_EMAIL in .env}
       POCKETBASE_SUPERUSER_PASSWORD: ${PB_SUPERUSER_PASSWORD:?Set PB_SUPERUSER_PASSWORD in .env}
@@ -58,6 +60,8 @@ services:
       HOST: 0.0.0.0
       PORT: 3000
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost}
+      APP_DOMAIN: ${APP_DOMAIN:-localhost}
+      ADMIN_DASHBOARD_DOMAIN: ${ADMIN_DASHBOARD_DOMAIN:-pb.localhost}
       POCKETBASE_URL: http://pocketbase:8090
       POCKETBASE_SUPERUSER_EMAIL: ${PB_SUPERUSER_EMAIL:?Set PB_SUPERUSER_EMAIL in .env}
       POCKETBASE_SUPERUSER_PASSWORD: ${PB_SUPERUSER_PASSWORD:?Set PB_SUPERUSER_PASSWORD in .env}
@@ -92,15 +96,15 @@ services:
     ports:
       - "${NGINX_PORT:-80}:80"
     environment:
-      SHORTENER_DOMAIN: ${SHORTENER_DOMAIN:-localhost}
-      POCKETBASE_ADMIN_DOMAIN: ${POCKETBASE_ADMIN_DOMAIN:-pb.localhost}
+      APP_DOMAIN: ${APP_DOMAIN:-localhost}
+      ADMIN_DASHBOARD_DOMAIN: ${ADMIN_DASHBOARD_DOMAIN:-pb.localhost}
       ADMIN_ALLOWED_IP: ${ADMIN_ALLOWED_IP:-0.0.0.0/0}
     volumes:
       - ./deploy/nginx.conf.template:/etc/nginx/default.conf.template:ro
     command:
       - /bin/sh
       - -ec
-      - envsubst '$$SHORTENER_DOMAIN $$POCKETBASE_ADMIN_DOMAIN $$ADMIN_ALLOWED_IP' < /etc/nginx/default.conf.template > /etc/nginx/conf.d/default.conf && exec nginx -g 'daemon off;'
+      - envsubst '$$APP_DOMAIN $$ADMIN_DASHBOARD_DOMAIN $$ADMIN_ALLOWED_IP' < /etc/nginx/default.conf.template > /etc/nginx/conf.d/default.conf && exec nginx -g 'daemon off;'
     depends_on:
       app:
         condition: service_healthy

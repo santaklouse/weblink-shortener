@@ -19,18 +19,36 @@ export function normalizePasswordResetRequest(body) {
 }
 
 export function normalizePasswordResetConfirmation(body) {
-  if (
-    typeof body?.token !== "string" ||
-    body.token.length < 20 ||
-    body.token.length > 2_048 ||
-    !/^[A-Za-z0-9._-]+$/.test(body.token)
-  ) {
-    throw new Error("This password reset link is invalid or has expired");
-  }
-
+  const token = normalizeAuthToken(
+    body?.token,
+    "This password reset link is invalid or has expired",
+  );
   const password = normalizePassword(body?.password);
   if (password !== body?.passwordConfirm) throw new Error("Passwords do not match");
-  return { token: body.token, password };
+  return { token, password };
+}
+
+export function normalizeVerificationRequest(body) {
+  return { email: normalizeEmail(body?.email) };
+}
+
+export function normalizeEmailVerificationConfirmation(body) {
+  return {
+    token: normalizeAuthToken(
+      body?.token,
+      "This email verification link is invalid or has expired",
+    ),
+  };
+}
+
+export function normalizeEmailChangeConfirmation(body) {
+  return {
+    token: normalizeAuthToken(
+      body?.token,
+      "This email change link is invalid or has expired",
+    ),
+    password: normalizePassword(body?.password),
+  };
 }
 
 function normalizeEmail(value) {
@@ -45,6 +63,18 @@ function normalizeEmail(value) {
 function normalizePassword(value) {
   if (typeof value !== "string" || value.length < 8 || value.length > 72) {
     throw new Error("Password must be between 8 and 72 characters");
+  }
+  return value;
+}
+
+function normalizeAuthToken(value, message) {
+  if (
+    typeof value !== "string" ||
+    value.length < 20 ||
+    value.length > 2_048 ||
+    !/^[A-Za-z0-9._-]+$/.test(value)
+  ) {
+    throw new Error(message);
   }
   return value;
 }

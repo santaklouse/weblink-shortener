@@ -8,6 +8,7 @@ A minimal Node.js URL shortener with PocketBase running behind the application.
 - Guest links expire after 24 hours by default.
 - Each guest link includes an unguessable statistics page URL.
 - Registration and sign-in use an `HttpOnly` session cookie.
+- Email registrations must be verified before password sign-in is allowed.
 - Email accounts can securely request and confirm password resets.
 - Users can sign in or create an account with Google OAuth 2.0.
 - Registered users receive permanent links and a dashboard with click statistics.
@@ -33,14 +34,14 @@ Open `.env` and set these values before starting the stack:
 
 - `PB_SUPERUSER_EMAIL`: the PocketBase administrator email.
 - `PB_SUPERUSER_PASSWORD`: a long, unique administrator password.
-- `SHORTENER_DOMAIN`: the public URL shortener hostname.
-- `POCKETBASE_ADMIN_DOMAIN`: a separate PocketBase administrator hostname.
+- `APP_DOMAIN`: the public URL shortener hostname.
+- `ADMIN_DASHBOARD_DOMAIN`: the separate PocketBase administrator hostname.
 - `PUBLIC_BASE_URL`: the complete public shortener URL including `http://` or `https://`.
 - `ADMIN_ALLOWED_IP`: the administrator's public IP address with a `/32` mask.
 - `ANALYTICS_HASH_SECRET`: a stable random secret containing at least 32 characters.
 - `TUNNEL_TOKEN`: the Cloudflare Tunnel token when the `cloudflared` service is used.
 - `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`: Google OAuth 2.0 web application credentials.
-- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, and `SMTP_PASSWORD`: the transactional email server used for password reset messages.
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, and `SMTP_PASSWORD`: the transactional email server used for account verification, password reset, and email-change messages.
 - `MAIL_FROM_ADDRESS`: a verified sender address accepted by the SMTP provider.
 
 Generate the analytics secret once and save the printed value in `.env`:
@@ -95,6 +96,22 @@ docker compose up -d --build setup app nginx
 
 The setup container enables Google OAuth for the PocketBase `users` collection and maps the Google profile name to the existing `name` field. The browser starts and completes authentication only through Node.js routes; the PocketBase URL, OAuth code verifier, PocketBase auth token, and Google client secret remain server-side.
 
+## Email verification
+
+Password registrations do not create a browser session immediately. PocketBase sends a verification message, but its link always targets the public Node.js application at `PUBLIC_BASE_URL/verify-email`; the verification token is then confirmed by a server-side Node.js request to PocketBase. Unverified accounts can request a new message from the verification page.
+
+The setup container replaces every PocketBase authentication template that contains a link:
+
+- account verification uses `/verify-email`;
+- password reset uses `/reset-password`;
+- email change confirmation uses `/confirm-email-change`.
+
+None of these messages use the PocketBase Dashboard domain or expose a PocketBase API URL. Run the setup service after changing `PUBLIC_BASE_URL` or either domain:
+
+```bash
+docker compose up -d --build setup app nginx
+```
+
 ## Password reset email
 
 Password reset requests are handled by Node.js and delivered by PocketBase. Configure the SMTP and sender entries already present in `.env` before using the flow in production. Use `SMTP_TLS=false` for a STARTTLS connection such as port 587, or `SMTP_TLS=true` when the SMTP provider requires an implicit TLS connection such as port 465.
@@ -128,8 +145,8 @@ PocketBase data is stored in the named Docker volume `pocketbase_data`. The comm
 
 Create `A` or `AAAA` DNS records for the public and administrator hostnames pointing to the server. The included Nginx configuration listens on port `80` and selects the upstream by hostname:
 
-- `SHORTENER_DOMAIN` routes to Node.js.
-- `POCKETBASE_ADMIN_DOMAIN` routes to PocketBase and is protected by an IP allowlist.
+- `APP_DOMAIN` routes to Node.js and must match the hostname in `PUBLIC_BASE_URL`.
+- `ADMIN_DASHBOARD_DOMAIN` routes only to PocketBase Dashboard and is protected by an IP allowlist.
 
 In production, terminate TLS in front of this Nginx instance using Cloudflare, an external load balancer, or another HTTPS proxy. When HTTPS is enabled, set `NODE_ENV=production` and use an `https://` value for `PUBLIC_BASE_URL`. Session cookies will then include the `Secure` flag.
 
@@ -173,8 +190,11 @@ PocketBase collection API rules are locked. The browser calls only these Node.js
 - `GET /api/stats/:token`: view statistics using the secret token.
 - `POST /api/auth/register`: create an account.
 - `POST /api/auth/login`: sign in.
+- `POST /api/auth/resend-verification`: request a new account verification email.
+- `POST /api/auth/verify-email`: confirm an account verification token.
 - `POST /api/auth/forgot-password`: request a password reset email.
 - `POST /api/auth/reset-password`: set a new password with a valid reset token.
+- `POST /api/auth/confirm-email-change`: confirm an email-change token and password.
 - `GET /api/auth/providers`: return enabled public sign-in choices.
 - `GET /api/auth/google/start`: start Google authentication.
 - `GET /api/auth/google-callback`: validate and complete Google authentication.
@@ -212,6 +232,8 @@ Set either `POCKETBASE_TOKEN` or both `POCKETBASE_SUPERUSER_EMAIL` and `POCKETBA
 - `RATE_LIMIT_MAX=30`: maximum API requests per IP address per 15 minutes.
 - `SESSION_MAX_AGE_DAYS=7`: session cookie lifetime.
 - `TRUST_PROXY=true`: trust the client IP forwarded by Nginx.
+- `APP_DOMAIN=localhost`: public application hostname routed to Node.js.
+- `ADMIN_DASHBOARD_DOMAIN=pb.localhost`: isolated PocketBase Dashboard hostname.
 - `NGINX_PORT=80`: published Nginx port.
 - `ANALYTICS_MAX_EVENTS=5000`: maximum events loaded for one detailed report.
 - `ANALYTICS_RECENT_EVENTS=50`: number of recent clicks returned by the API.

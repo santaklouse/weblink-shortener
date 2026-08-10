@@ -22,6 +22,8 @@ const schema = z
     HOST: z.string().trim().min(1).default("127.0.0.1"),
     PORT: z.coerce.number().int().min(1).max(65_535).default(3000),
     PUBLIC_BASE_URL: optionalUrl,
+    APP_DOMAIN: z.string().trim().min(1).default("localhost"),
+    ADMIN_DASHBOARD_DOMAIN: z.string().trim().min(1).default("pb.localhost"),
     POCKETBASE_URL: z.url().default("http://127.0.0.1:8090"),
     POCKETBASE_TOKEN: optionalString,
     POCKETBASE_SUPERUSER_EMAIL: optionalString,
@@ -104,6 +106,35 @@ const schema = z
         message: "Enter a valid sender email address",
       });
     }
+    const hostnamePattern = /^(?:localhost|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63})$/i;
+    if (!hostnamePattern.test(env.APP_DOMAIN)) {
+      context.addIssue({
+        code: "custom",
+        path: ["APP_DOMAIN"],
+        message: "APP_DOMAIN must be a hostname without a scheme or path",
+      });
+    }
+    if (!hostnamePattern.test(env.ADMIN_DASHBOARD_DOMAIN)) {
+      context.addIssue({
+        code: "custom",
+        path: ["ADMIN_DASHBOARD_DOMAIN"],
+        message: "ADMIN_DASHBOARD_DOMAIN must be a hostname without a scheme or path",
+      });
+    }
+    if (env.APP_DOMAIN === env.ADMIN_DASHBOARD_DOMAIN) {
+      context.addIssue({
+        code: "custom",
+        path: ["ADMIN_DASHBOARD_DOMAIN"],
+        message: "ADMIN_DASHBOARD_DOMAIN must be different from APP_DOMAIN",
+      });
+    }
+    if (env.PUBLIC_BASE_URL && new URL(env.PUBLIC_BASE_URL).hostname !== env.APP_DOMAIN) {
+      context.addIssue({
+        code: "custom",
+        path: ["PUBLIC_BASE_URL"],
+        message: "PUBLIC_BASE_URL hostname must match APP_DOMAIN",
+      });
+    }
   });
 
 export function loadConfig(environment = process.env) {
@@ -121,6 +152,8 @@ export function loadConfig(environment = process.env) {
     host: result.data.HOST,
     port: result.data.PORT,
     publicBaseUrl: result.data.PUBLIC_BASE_URL?.replace(/\/$/, ""),
+    appDomain: result.data.APP_DOMAIN,
+    adminDashboardDomain: result.data.ADMIN_DASHBOARD_DOMAIN,
     pocketBaseUrl: result.data.POCKETBASE_URL.replace(/\/$/, ""),
     pocketBaseToken: result.data.POCKETBASE_TOKEN,
     pocketBaseEmail: result.data.POCKETBASE_SUPERUSER_EMAIL,

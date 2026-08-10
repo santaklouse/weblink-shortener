@@ -1,4 +1,5 @@
 import { loadConfig } from "../src/config.js";
+import { buildAuthEmailTemplates } from "../src/email-templates.js";
 import {
   CLICK_EVENTS_COLLECTION,
   LINKS_COLLECTION,
@@ -9,15 +10,7 @@ import {
 
 const config = loadConfig();
 const client = createPocketBaseClient(config);
-
-const resetPasswordTemplate = {
-  subject: "Reset your {APP_NAME} password",
-  body: `<p>Hello,</p>
-<p>Click the button below to choose a new password.</p>
-<p><a class="btn" href="{APP_URL}/reset-password?token={TOKEN}" target="_blank" rel="noopener">Reset password</a></p>
-<p><i>If you did not request a password reset, you can ignore this email.</i></p>
-<p>Thanks,<br>{APP_NAME} team</p>`,
-};
+const authEmailTemplates = buildAuthEmailTemplates(config.publicBaseUrl);
 
 function googleOAuthOptions(existing = {}) {
   if (!config.googleClientId || !config.googleClientSecret) return null;
@@ -54,7 +47,7 @@ async function ensureUsersCollection() {
   const existing = await findCollection(USERS_COLLECTION);
   if (existing) {
     const oauth2 = googleOAuthOptions(existing.oauth2);
-    const updates = { resetPasswordTemplate };
+    const updates = { ...authEmailTemplates };
     if (oauth2) updates.oauth2 = oauth2;
 
     const updated = await client.collections.update(existing.id, updates);
@@ -88,7 +81,7 @@ async function ensureUsersCollection() {
       enabled: true,
       identityFields: ["email"],
     },
-    resetPasswordTemplate,
+    ...authEmailTemplates,
     ...(oauth2 ? { oauth2 } : {}),
   });
   console.log(`Auth collection ${USERS_COLLECTION} created.`);
