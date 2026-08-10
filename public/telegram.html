@@ -1,7 +1,9 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://telegram.org ; img-src 'self' data:; style-src 'self' 'unsafe-inline'">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="description" content="Manage Weblink Shortener links inside Telegram" />
     <title>Weblink Shortener</title>
@@ -21,13 +23,14 @@
         <h1>Could not open the Mini App</h1>
         <p id="error-message">Open this page from the bot in Telegram.</p>
         <button id="retry-button" type="button">Try again</button>
+        <button class="open-website-button" type="button">Open website</button>
       </section>
 
       <section id="connect-panel" class="state-panel" hidden>
         <div class="state-icon" aria-hidden="true">↗</div>
         <h1>Connect your account</h1>
         <p>Sign in on the website, choose <strong>Connect Telegram</strong>, then open the one-time bot link.</p>
-        <button id="open-website-button" type="button">Open website</button>
+        <button class="open-website-button" type="button">Open website</button>
       </section>
 
       <div id="app-panel" hidden>
