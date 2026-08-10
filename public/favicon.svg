@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title">
+  <title id="title">Weblink Shortener</title>
+  <defs>
+    <linearGradient id="background" x1="18" y1="12" x2="110" y2="116" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#21ad8b" />
+      <stop offset="1" stop-color="#0c6f5b" />
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="30" fill="url(#background)" />
+  <g transform="rotate(-45 64 64)" fill="none" stroke="#fff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M57 42H39a21 21 0 0 0 0 42h18a21 21 0 0 0 15-6" />
+    <path d="M71 86h18a21 21 0 0 0 0-42H71a21 21 0 0 0-15 6" />
+    <path d="M47 64h34" />
+  </g>
+</svg>
