@@ -15,7 +15,18 @@ const linksMessage = document.querySelector("#links-message");
 const googleSignIn = document.querySelector("#google-sign-in");
 const authDivider = document.querySelector("#auth-divider");
 const authMessage = document.querySelector("#auth-message");
+const telegramIntegration = document.querySelector("#telegram-integration");
+const telegramStatus = document.querySelector("#telegram-status");
+const telegramMessage = document.querySelector("#telegram-message");
+const telegramConnectButton = document.querySelector("#telegram-connect-button");
+const telegramOpenLink = document.querySelector("#telegram-open-link");
+const telegramDisconnectButton = document.querySelector("#telegram-disconnect-button");
+const editLinkDialog = document.querySelector("#edit-link-dialog");
+const editLinkForm = document.querySelector("#edit-link-form");
+const editLinkMessage = document.querySelector("#edit-link-message");
 let currentUser = null;
+let telegramConfigured = false;
+let editingLink = null;
 
 document.querySelector("#domain-prefix").textContent = `${window.location.host}/`;
 
@@ -38,7 +49,11 @@ function renderSession() {
   dashboard.hidden = !loggedIn;
   userSummary.hidden = !loggedIn;
   userEmail.textContent = currentUser?.email || "";
-  if (loggedIn) loadLinks();
+  telegramIntegration.hidden = !(loggedIn && telegramConfigured);
+  if (loggedIn) {
+    loadLinks();
+    if (telegramConfigured) loadTelegramStatus();
+  }
 }
 
 async function loadSession() {
@@ -56,11 +71,71 @@ async function loadAuthProviders() {
     const providers = await api("/api/auth/providers");
     googleSignIn.hidden = !providers.google;
     authDivider.hidden = !providers.google;
+    telegramConfigured = Boolean(providers.telegram);
+    telegramIntegration.hidden = !(currentUser && telegramConfigured);
+    if (currentUser && telegramConfigured) loadTelegramStatus();
   } catch {
     googleSignIn.hidden = true;
     authDivider.hidden = true;
+    telegramConfigured = false;
+    telegramIntegration.hidden = true;
   }
 }
+
+async function loadTelegramStatus() {
+  telegramMessage.textContent = "";
+  try {
+    const data = await api("/api/telegram/status");
+    if (data.connected) {
+      const accountName = data.account.username
+        ? `@${data.account.username}`
+        : data.account.firstName || "your Telegram account";
+      telegramStatus.textContent = `Connected as ${accountName}.`;
+      telegramConnectButton.hidden = true;
+      telegramOpenLink.hidden = true;
+      telegramDisconnectButton.hidden = false;
+    } else {
+      telegramStatus.textContent = "Connect Telegram to create, edit, manage, and inspect your links from a private chat.";
+      telegramConnectButton.hidden = false;
+      telegramOpenLink.hidden = true;
+      telegramDisconnectButton.hidden = true;
+    }
+  } catch (error) {
+    telegramMessage.textContent = error.message;
+    telegramMessage.classList.add("error");
+  }
+}
+
+telegramConnectButton.addEventListener("click", async () => {
+  telegramMessage.textContent = "";
+  telegramMessage.classList.remove("error");
+  telegramConnectButton.disabled = true;
+  try {
+    const data = await api("/api/telegram/link", { method: "POST" });
+    telegramOpenLink.href = data.botUrl;
+    telegramOpenLink.hidden = false;
+    telegramMessage.textContent = `The one-time login link expires at ${new Date(data.expiresAt).toLocaleTimeString("en-US")}.`;
+  } catch (error) {
+    telegramMessage.textContent = error.message;
+    telegramMessage.classList.add("error");
+  } finally {
+    telegramConnectButton.disabled = false;
+  }
+});
+
+telegramDisconnectButton.addEventListener("click", async () => {
+  if (!window.confirm("Disconnect this Telegram account?")) return;
+  telegramDisconnectButton.disabled = true;
+  try {
+    await api("/api/telegram/link", { method: "DELETE" });
+    await loadTelegramStatus();
+  } catch (error) {
+    telegramMessage.textContent = error.message;
+    telegramMessage.classList.add("error");
+  } finally {
+    telegramDisconnectButton.disabled = false;
+  }
+});
 
 function showAuthenticationResult() {
   const url = new URL(window.location.href);
@@ -199,6 +274,18 @@ function createLinkRow(link) {
   statsAnchor.textContent = "View";
   statsCell.append(statsAnchor);
   const actionsCell = document.createElement("td");
+  const editButton = document.createElement("button");
+  editButton.className = "mini-button";
+  editButton.type = "button";
+  editButton.textContent = "Edit";
+  editButton.addEventListener("click", () => {
+    editingLink = link;
+    editLinkForm.elements.url.value = link.targetUrl;
+    editLinkForm.elements.slug.value = link.slug;
+    editLinkMessage.textContent = "";
+    editLinkMessage.classList.remove("error");
+    editLinkDialog.showModal();
+  });
   const toggleButton = document.createElement("button");
   toggleButton.className = "mini-button";
   toggleButton.type = "button";
@@ -235,10 +322,40 @@ function createLinkRow(link) {
       deleteButton.disabled = false;
     }
   });
-  actionsCell.append(toggleButton, deleteButton);
+  actionsCell.append(editButton, toggleButton, deleteButton);
   row.append(shortCell, clicksCell, createdCell, statsCell, actionsCell);
   return row;
 }
+
+editLinkForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!editingLink) return;
+  editLinkMessage.textContent = "";
+  editLinkMessage.classList.remove("error");
+  const button = editLinkForm.querySelector('button[type="submit"]');
+  button.disabled = true;
+  const values = new FormData(editLinkForm);
+  try {
+    await api(`/api/links/${editingLink.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: values.get("url"), alias: values.get("slug") }),
+    });
+    editLinkDialog.close();
+    editingLink = null;
+    await loadLinks();
+  } catch (error) {
+    editLinkMessage.textContent = error.message;
+    editLinkMessage.classList.add("error");
+  } finally {
+    button.disabled = false;
+  }
+});
+
+document.querySelector("#edit-link-cancel").addEventListener("click", () => {
+  editLinkDialog.close();
+  editingLink = null;
+});
 
 document.querySelector("#logout-button").addEventListener("click", async () => {
   await api("/api/auth/logout", { method: "POST" });

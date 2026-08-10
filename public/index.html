@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="A simple URL shortener with click statistics" />
     <title>Short URL</title>
-    <link rel="stylesheet" href="/styles.css?v=11" />
-    <script src="/app.js?v=6" defer></script>
+    <link rel="stylesheet" href="/styles.css?v=15" />
+    <script src="/app.js?v=8" defer></script>
     <script src="/password-visibility.js?v=1" defer></script>
   </head>
   <body>
@@ -85,6 +85,18 @@
         </section>
 
         <section id="dashboard" class="card compact" hidden aria-labelledby="dashboard-title">
+          <section id="telegram-integration" class="telegram-integration" hidden aria-labelledby="telegram-title">
+            <div>
+              <h3 id="telegram-title">Telegram bot</h3>
+              <p id="telegram-status">Connect Telegram to create, edit, manage, and inspect your links from a private chat.</p>
+            </div>
+            <div class="telegram-actions">
+              <button id="telegram-connect-button" class="mini-button" type="button">Connect Telegram</button>
+              <a id="telegram-open-link" class="mini-link" href="#" target="_blank" rel="noopener noreferrer" hidden>Open Telegram bot</a>
+              <button id="telegram-disconnect-button" class="mini-button danger" type="button" hidden>Disconnect</button>
+            </div>
+            <p id="telegram-message" class="message" role="status" aria-live="polite"></p>
+          </section>
           <div class="topbar">
             <h2 id="dashboard-title">My links</h2>
             <button id="refresh-button" class="text-button" type="button">Refresh</button>
@@ -101,5 +113,20 @@
         </section>
       </div>
     </main>
+
+    <dialog id="edit-link-dialog" class="edit-link-dialog" aria-labelledby="edit-link-title">
+      <form id="edit-link-form">
+        <h2 id="edit-link-title">Edit link</h2>
+        <label for="edit-link-url">Destination URL</label>
+        <input id="edit-link-url" name="url" type="url" autocomplete="url" required />
+        <label for="edit-link-slug">Slug</label>
+        <input id="edit-link-slug" name="slug" type="text" minlength="4" maxlength="32" pattern="[a-zA-Z0-9_-]{4,32}" autocomplete="off" required />
+        <p id="edit-link-message" class="message" role="status" aria-live="polite"></p>
+        <div class="dialog-actions">
+          <button id="edit-link-cancel" class="mini-button" type="button">Cancel</button>
+          <button type="submit">Save changes</button>
+        </div>
+      </form>
+    </dialog>
   </body>
 </html>

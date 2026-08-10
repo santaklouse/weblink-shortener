@@ -3,6 +3,8 @@ import { buildAuthEmailTemplates } from "../src/email-templates.js";
 import {
   CLICK_EVENTS_COLLECTION,
   LINKS_COLLECTION,
+  TELEGRAM_ACCOUNTS_COLLECTION,
+  TELEGRAM_LINK_TOKENS_COLLECTION,
   USERS_COLLECTION,
   authenticatePocketBase,
   createPocketBaseClient,
@@ -458,12 +460,136 @@ async function ensureClickEventsCollection(linksCollection) {
   return created;
 }
 
+async function ensureTelegramAccountsCollection(usersCollection) {
+  const existing = await findCollection(TELEGRAM_ACCOUNTS_COLLECTION);
+  if (existing) {
+    console.log(`Collection ${TELEGRAM_ACCOUNTS_COLLECTION} already exists; no changes required.`);
+    return existing;
+  }
+
+  const created = await client.collections.create({
+    name: TELEGRAM_ACCOUNTS_COLLECTION,
+    type: "base",
+    listRule: null,
+    viewRule: null,
+    createRule: null,
+    updateRule: null,
+    deleteRule: null,
+    fields: [
+      {
+        name: "owner",
+        type: "relation",
+        required: true,
+        collectionId: usersCollection.id,
+        cascadeDelete: true,
+        minSelect: 1,
+        maxSelect: 1,
+      },
+      {
+        name: "telegramUserId",
+        type: "text",
+        required: true,
+        hidden: true,
+        min: 1,
+        max: 20,
+        pattern: "^[1-9][0-9]*$",
+        autogeneratePattern: "",
+      },
+      {
+        name: "chatId",
+        type: "text",
+        required: true,
+        hidden: true,
+        min: 1,
+        max: 20,
+        pattern: "^[1-9][0-9]*$",
+        autogeneratePattern: "",
+      },
+      {
+        name: "username",
+        type: "text",
+        required: false,
+        min: 0,
+        max: 32,
+        pattern: "^[A-Za-z0-9_]*$",
+        autogeneratePattern: "",
+      },
+      {
+        name: "firstName",
+        type: "text",
+        required: false,
+        min: 0,
+        max: 128,
+        pattern: "",
+        autogeneratePattern: "",
+      },
+      { name: "created", type: "autodate", onCreate: true, onUpdate: false },
+      { name: "updated", type: "autodate", onCreate: true, onUpdate: true },
+    ],
+    indexes: [
+      "CREATE UNIQUE INDEX `idx_telegram_accounts_user` ON `telegram_accounts` (`telegramUserId`)",
+      "CREATE UNIQUE INDEX `idx_telegram_accounts_owner` ON `telegram_accounts` (`owner`)",
+    ],
+  });
+  console.log(`Collection ${TELEGRAM_ACCOUNTS_COLLECTION} created.`);
+  return created;
+}
+
+async function ensureTelegramLinkTokensCollection(usersCollection) {
+  const existing = await findCollection(TELEGRAM_LINK_TOKENS_COLLECTION);
+  if (existing) {
+    console.log(`Collection ${TELEGRAM_LINK_TOKENS_COLLECTION} already exists; no changes required.`);
+    return existing;
+  }
+
+  const created = await client.collections.create({
+    name: TELEGRAM_LINK_TOKENS_COLLECTION,
+    type: "base",
+    listRule: null,
+    viewRule: null,
+    createRule: null,
+    updateRule: null,
+    deleteRule: null,
+    fields: [
+      {
+        name: "owner",
+        type: "relation",
+        required: true,
+        collectionId: usersCollection.id,
+        cascadeDelete: true,
+        minSelect: 1,
+        maxSelect: 1,
+      },
+      {
+        name: "tokenHash",
+        type: "text",
+        required: true,
+        hidden: true,
+        min: 64,
+        max: 64,
+        pattern: "^[a-f0-9]{64}$",
+        autogeneratePattern: "",
+      },
+      { name: "expiresAt", type: "date", required: true },
+      { name: "created", type: "autodate", onCreate: true, onUpdate: false },
+    ],
+    indexes: [
+      "CREATE UNIQUE INDEX `idx_telegram_link_tokens_hash` ON `telegram_link_tokens` (`tokenHash`)",
+      "CREATE INDEX `idx_telegram_link_tokens_owner` ON `telegram_link_tokens` (`owner`)",
+    ],
+  });
+  console.log(`Collection ${TELEGRAM_LINK_TOKENS_COLLECTION} created.`);
+  return created;
+}
+
 async function main() {
   await authenticatePocketBase(client, config);
   await ensureApplicationSettings();
   const usersCollection = await ensureUsersCollection();
   const linksCollection = await ensureLinksCollection(usersCollection);
   await ensureClickEventsCollection(linksCollection);
+  await ensureTelegramAccountsCollection(usersCollection);
+  await ensureTelegramLinkTokensCollection(usersCollection);
 }
 
 main().catch((error) => {

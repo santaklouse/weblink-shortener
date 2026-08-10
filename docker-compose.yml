@@ -75,6 +75,9 @@ services:
       ANALYTICS_RECENT_EVENTS: ${ANALYTICS_RECENT_EVENTS:-50}
       GEOIP_DB_PATH: ${GEOIP_DB_PATH:-/geoip/GeoLite2-Country.mmdb}
       TRUST_CLOUDFLARE_HEADERS: ${TRUST_CLOUDFLARE_HEADERS:-false}
+      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
+      TELEGRAM_INTERNAL_SECRET: ${TELEGRAM_INTERNAL_SECRET:-}
+      TELEGRAM_LINK_TTL_MINUTES: ${TELEGRAM_LINK_TTL_MINUTES:-10}
     depends_on:
       setup:
         condition: service_completed_successfully
@@ -87,6 +90,24 @@ services:
     read_only: true
     volumes:
       - ./geoip:/geoip:ro
+    tmpfs:
+      - /tmp
+
+  telegram-bot:
+    profiles: ["telegram"]
+    build:
+      context: .
+    command: ["node", "src/telegram-bot.js"]
+    restart: unless-stopped
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_INTERNAL_SECRET: ${TELEGRAM_INTERNAL_SECRET:-}
+      APP_INTERNAL_URL: http://app:3000
+      TELEGRAM_POLL_TIMEOUT_SECONDS: ${TELEGRAM_POLL_TIMEOUT_SECONDS:-25}
+    depends_on:
+      app:
+        condition: service_healthy
+    read_only: true
     tmpfs:
       - /tmp
 

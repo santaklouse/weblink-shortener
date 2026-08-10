@@ -11,6 +11,8 @@ A minimal Node.js URL shortener with PocketBase running behind the application.
 - Email registrations must be verified before password sign-in is allowed.
 - Email accounts can securely request and confirm password resets.
 - Users can sign in or create an account with Google OAuth 2.0.
+- Signed-in users can securely connect a Telegram bot with a one-time deep link.
+- The Telegram bot can create, list, edit, enable, disable, delete, and inspect owned links.
 - Registered users receive permanent links and a dashboard with click statistics.
 - Custom slugs are available only to registered users and must be unique.
 - Registered owners can enable, disable, and delete their links.
@@ -43,8 +45,15 @@ Open `.env` and set these values before starting the stack:
 - `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`: Google OAuth 2.0 web application credentials.
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, and `SMTP_PASSWORD`: the transactional email server used for account verification, password reset, and email-change messages.
 - `MAIL_FROM_ADDRESS`: a verified sender address accepted by the SMTP provider.
+- `TELEGRAM_BOT_USERNAME`, `TELEGRAM_BOT_TOKEN`, and `TELEGRAM_INTERNAL_SECRET`: Telegram bot credentials and the private bot-to-application secret.
 
 Generate the analytics secret once and save the printed value in `.env`:
+
+```bash
+openssl rand -hex 32
+```
+
+Generate a separate Telegram internal secret:
 
 ```bash
 openssl rand -hex 32
@@ -66,6 +75,12 @@ Docker Compose automatically:
 4. Creates the locked `click_events` analytics collection.
 5. Starts the Node.js application.
 6. Starts Nginx and Cloudflare Tunnel after the health checks succeed.
+
+The Telegram service uses an opt-in Compose profile and starts after its credentials are configured:
+
+```bash
+docker compose --profile telegram up -d --build setup app telegram-bot nginx
+```
 
 With the local defaults:
 
@@ -95,6 +110,39 @@ docker compose up -d --build setup app nginx
 ```
 
 The setup container enables Google OAuth for the PocketBase `users` collection and maps the Google profile name to the existing `name` field. The browser starts and completes authentication only through Node.js routes; the PocketBase URL, OAuth code verifier, PocketBase auth token, and Google client secret remain server-side.
+
+## Telegram bot
+
+Create the bot in Telegram by opening [@BotFather](https://t.me/BotFather), running `/newbot`, and following its prompts. Save the returned token as `TELEGRAM_BOT_TOKEN` and the bot username without `@` as `TELEGRAM_BOT_USERNAME`. Generate `TELEGRAM_INTERNAL_SECRET` with the command shown above; do not reuse the bot token or analytics secret.
+
+Start the Telegram profile:
+
+```bash
+docker compose --profile telegram up -d --build setup app telegram-bot nginx
+```
+
+To sign in to the bot safely:
+
+1. Sign in to the web application.
+2. Select **Connect Telegram** in the dashboard.
+3. Open the generated one-time Telegram link within 10 minutes.
+4. Press **Start** in the private bot chat.
+
+The website never sends an email password, Google token, PocketBase token, or browser session cookie to Telegram. The deep-link token is random, stored only as an HMAC hash, expires, and is deleted after use. The bot accepts account commands only in private chats.
+
+Available commands:
+
+- `/new <URL> [slug]`
+- `/links`
+- `/stats <slug>`
+- `/edit <slug> <URL> [new-slug]`
+- `/enable <slug>` and `/disable <slug>`
+- `/delete <slug>`
+- `/account`
+- `/logout`
+- `/help`
+
+The bot communicates only with the private Node.js API at `http://app:3000` inside the Compose network. It never connects to PocketBase directly. Long polling is used, so no public Telegram webhook or additional domain is required.
 
 ## Email verification
 
@@ -203,11 +251,16 @@ PocketBase collection API rules are locked. The browser calls only these Node.js
 - `POST /api/auth/logout`: sign out.
 - `GET /api/auth/me`: return the current user.
 - `GET /api/links`: list the signed-in user's links.
-- `PATCH /api/links/:id`: enable or disable an owned link.
+- `PATCH /api/links/:id`: edit the destination URL or slug and enable or disable an owned link.
 - `DELETE /api/links/:id`: delete an owned link.
+- `GET /api/telegram/status`: return the signed-in user's Telegram connection status.
+- `POST /api/telegram/link`: create a one-time Telegram deep link.
+- `DELETE /api/telegram/link`: disconnect Telegram from the signed-in account.
 - `GET /:slug`: redirect and increment the click counter.
 
 PocketBase superuser credentials exist only in the `app` and `setup` container environments. They are not included in browser HTML or JavaScript.
+
+The `/api/internal/telegram/*` routes require `TELEGRAM_INTERNAL_SECRET`, are called only from the Compose network, and always resolve link ownership from the stored Telegram binding. The bot container has no PocketBase credentials.
 
 ## Running without Docker
 
@@ -241,6 +294,8 @@ Set either `POCKETBASE_TOKEN` or both `POCKETBASE_SUPERUSER_EMAIL` and `POCKETBA
 - `ANALYTICS_RECENT_EVENTS=50`: number of recent clicks returned by the API.
 - `GEOIP_DB_PATH=/geoip/GeoLite2-Country.mmdb`: local MaxMind database path.
 - `TRUST_CLOUDFLARE_HEADERS=false`: trust Cloudflare location and visitor-IP headers.
+- `TELEGRAM_LINK_TTL_MINUTES=10`: one-time Telegram login link lifetime.
+- `TELEGRAM_POLL_TIMEOUT_SECONDS=25`: Telegram Bot API long-poll timeout.
 
 ## Verification
 

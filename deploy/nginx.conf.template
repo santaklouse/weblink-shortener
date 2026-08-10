@@ -4,6 +4,10 @@ server {
 
     client_max_body_size 16k;
 
+    location ^~ /api/internal/ {
+        return 404;
+    }
+
     location / {
         proxy_pass http://app:3000;
         proxy_http_version 1.1;

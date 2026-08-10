@@ -3,6 +3,8 @@ import PocketBase from "pocketbase";
 export const LINKS_COLLECTION = "short_links";
 export const USERS_COLLECTION = "users";
 export const CLICK_EVENTS_COLLECTION = "click_events";
+export const TELEGRAM_ACCOUNTS_COLLECTION = "telegram_accounts";
+export const TELEGRAM_LINK_TOKENS_COLLECTION = "telegram_link_tokens";
 
 export function createPocketBaseClient(config) {
   const client = new PocketBase(config.pocketBaseUrl);
@@ -29,6 +31,8 @@ export async function connectPocketBase(client, config) {
     client.collections.getOne(LINKS_COLLECTION),
     client.collections.getOne(USERS_COLLECTION),
     client.collections.getOne(CLICK_EVENTS_COLLECTION),
+    client.collections.getOne(TELEGRAM_ACCOUNTS_COLLECTION),
+    client.collections.getOne(TELEGRAM_LINK_TOKENS_COLLECTION),
   ]);
 }
 

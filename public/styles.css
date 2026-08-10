@@ -26,6 +26,8 @@ body {
 
 .shell {
   display: grid;
+  width: 100%;
+  min-width: 0;
   min-height: 100vh;
   place-items: center;
   padding: 32px 18px;
@@ -33,12 +35,15 @@ body {
 
 .stack {
   display: grid;
-  width: min(100%, 760px);
+  width: 100%;
+  max-width: 760px;
+  min-width: 0;
   gap: 20px;
 }
 
 .card {
   width: 100%;
+  min-width: 0;
   padding: clamp(28px, 7vw, 58px);
   border: 1px solid rgba(23, 33, 43, 0.08);
   border-radius: 28px;
@@ -62,6 +67,23 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
+}
+
+.topbar {
+  width: 100%;
+  min-width: 0;
+}
+
+.user-summary {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.user-summary span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .topbar .eyebrow {
@@ -430,6 +452,87 @@ button.mini-button.danger {
   color: #a52a21;
 }
 
+.telegram-integration {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px 20px;
+  align-items: center;
+  margin-bottom: 28px;
+  padding: 18px;
+  border: 1px solid #badfd6;
+  border-radius: 14px;
+  background: #effaf7;
+}
+
+.telegram-integration h3,
+.telegram-integration p {
+  margin: 0;
+}
+
+.telegram-integration p {
+  margin-top: 5px;
+  color: #35645a;
+  line-height: 1.45;
+}
+
+.telegram-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.telegram-actions .mini-button {
+  margin: 0;
+}
+
+.mini-link {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 9px;
+  background: #159175;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.telegram-integration .message {
+  grid-column: 1 / -1;
+}
+
+.edit-link-dialog {
+  width: min(calc(100% - 32px), 560px);
+  padding: 28px;
+  border: 1px solid rgba(23, 33, 43, 0.12);
+  border-radius: 20px;
+  background: #fff;
+  color: #17212b;
+  box-shadow: 0 24px 80px rgba(30, 56, 66, 0.24);
+}
+
+.edit-link-dialog::backdrop {
+  background: rgba(23, 33, 43, 0.48);
+  backdrop-filter: blur(3px);
+}
+
+.edit-link-dialog h2 {
+  margin-bottom: 10px;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.dialog-actions .mini-button,
+.dialog-actions button {
+  margin: 0;
+}
+
 .stats-link,
 .result small {
   display: block;
@@ -442,6 +545,9 @@ button.mini-button.danger {
 }
 
 .table-wrap {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   overflow-x: auto;
 }
 
@@ -774,6 +880,15 @@ button.click-details-toggle:focus-visible {
 
   .topbar {
     align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .telegram-integration {
+    grid-template-columns: 1fr;
+  }
+
+  .telegram-actions {
+    align-items: stretch;
     flex-direction: column;
   }
 

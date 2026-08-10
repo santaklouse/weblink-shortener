@@ -34,8 +34,17 @@ import {
   CLICK_EVENTS_COLLECTION,
   createUserClient,
   LINKS_COLLECTION,
+  TELEGRAM_ACCOUNTS_COLLECTION,
+  TELEGRAM_LINK_TOKENS_COLLECTION,
   USERS_COLLECTION,
 } from "./pocketbase.js";
+import {
+  buildTelegramDeepLink,
+  generateTelegramLinkToken,
+  hashTelegramLinkToken,
+  matchesInternalSecret,
+  normalizeTelegramIdentity,
+} from "./telegram.js";
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const publicDirectory = path.resolve(currentDirectory, "../public");
@@ -44,6 +53,13 @@ function clientError(response, message, status = 400, code) {
   const body = { error: message };
   if (code) body.code = code;
   return response.status(status).json(body);
+}
+
+function telegramClientError(message, status = 400) {
+  const error = new Error(message);
+  error.telegramClientError = true;
+  error.status = status;
+  return error;
 }
 
 function sessionCookieOptions(config) {
@@ -133,6 +149,22 @@ async function createRecord(client, url, requestedSlug, ownerId, anonymousLinkTt
   throw new Error("Could not generate an available short URL");
 }
 
+function normalizeOwnedLinkUpdate(body) {
+  const update = {};
+  if (Object.hasOwn(body || {}, "url")) update.url = normalizeTargetUrl(body.url);
+  if (Object.hasOwn(body || {}, "alias")) {
+    const alias = normalizeAlias(body.alias);
+    if (!alias) throw new Error("The slug cannot be empty");
+    update.slug = alias;
+  }
+  if (Object.hasOwn(body || {}, "active")) {
+    if (typeof body.active !== "boolean") throw new Error("The active field must be true or false");
+    update.active = body.active;
+  }
+  if (Object.keys(update).length === 0) throw new Error("Provide a URL, slug, or active state to update");
+  return update;
+}
+
 export function createApp({
   client,
   config,
@@ -178,6 +210,25 @@ export function createApp({
     legacyHeaders: false,
     message: { error: "Too many password reset requests. Please try again later." },
   });
+
+  const telegramInternalLimiter = rateLimit({
+    windowMs: 60 * 1_000,
+    limit: 300,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    message: { error: "Too many Telegram bot requests" },
+  });
+
+  const telegramEnabled = Boolean(config.telegramBotUsername && config.telegramInternalSecret);
+  const authenticateTelegramInternal = (request, response, next) => {
+    if (!telegramEnabled) return clientError(response, "Telegram integration is not configured", 503);
+    if (!matchesInternalSecret(request.get("x-telegram-bot-secret"), config.telegramInternalSecret)) {
+      return clientError(response, "Not found", 404);
+    }
+    return next();
+  };
+
+  app.use("/api/internal/telegram", authenticateTelegramInternal, telegramInternalLimiter);
 
   const resolveUser = async (request, response, next, required) => {
     const token = request.cookies[config.sessionCookieName];
@@ -305,7 +356,7 @@ export function createApp({
   app.get("/api/auth/providers", apiLimiter, async (_request, response, next) => {
     try {
       const google = await getGoogleProvider();
-      response.json({ google: Boolean(google) });
+      response.json({ google: Boolean(google), telegram: telegramEnabled });
     } catch (error) {
       next(error);
     }
@@ -508,6 +559,336 @@ export function createApp({
     response.json({ user: publicUser(request.user) });
   });
 
+  const findTelegramBindingByOwner = async (ownerId) => {
+    try {
+      const filter = client.filter("owner = {:owner}", { owner: ownerId });
+      return await client.collection(TELEGRAM_ACCOUNTS_COLLECTION).getFirstListItem(filter);
+    } catch (error) {
+      if (error?.status === 404) return null;
+      throw error;
+    }
+  };
+
+  const findTelegramBindingByUser = async (telegramUserId) => {
+    try {
+      const filter = client.filter("telegramUserId = {:telegramUserId}", { telegramUserId });
+      return await client.collection(TELEGRAM_ACCOUNTS_COLLECTION).getFirstListItem(filter);
+    } catch (error) {
+      if (error?.status === 404) return null;
+      throw error;
+    }
+  };
+
+  const deleteTelegramTokensForOwner = async (ownerId) => {
+    const filter = client.filter("owner = {:owner}", { owner: ownerId });
+    const records = await client.collection(TELEGRAM_LINK_TOKENS_COLLECTION).getFullList({
+      filter,
+      fields: "id",
+    });
+    await Promise.all(records.map((record) =>
+      client.collection(TELEGRAM_LINK_TOKENS_COLLECTION).delete(record.id)));
+  };
+
+  app.get("/api/telegram/status", apiLimiter, authenticate, async (request, response, next) => {
+    try {
+      const binding = await findTelegramBindingByOwner(request.user.id);
+      return response.json({
+        configured: telegramEnabled,
+        connected: Boolean(binding),
+        account: binding
+          ? {
+              username: binding.username || null,
+              firstName: binding.firstName || null,
+              connectedAt: binding.created,
+            }
+          : null,
+      });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  app.post("/api/telegram/link", apiLimiter, authenticate, async (request, response, next) => {
+    if (!telegramEnabled) return clientError(response, "Telegram integration is not configured", 503);
+
+    try {
+      await deleteTelegramTokensForOwner(request.user.id);
+      const token = generateTelegramLinkToken();
+      const tokenHash = hashTelegramLinkToken(token, config.telegramInternalSecret);
+      const expiresAt = new Date(Date.now() + config.telegramLinkTtlMs).toISOString();
+      await client.collection(TELEGRAM_LINK_TOKENS_COLLECTION).create({
+        owner: request.user.id,
+        tokenHash,
+        expiresAt,
+      });
+      return response.status(201).json({
+        botUrl: buildTelegramDeepLink(config.telegramBotUsername, token),
+        expiresAt,
+      });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  app.delete("/api/telegram/link", apiLimiter, authenticate, async (request, response, next) => {
+    try {
+      const binding = await findTelegramBindingByOwner(request.user.id);
+      if (binding) await client.collection(TELEGRAM_ACCOUNTS_COLLECTION).delete(binding.id);
+      await deleteTelegramTokensForOwner(request.user.id);
+      return response.status(204).end();
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  const resolveTelegramOwner = async (body) => {
+    let identity;
+    try {
+      identity = normalizeTelegramIdentity(body);
+    } catch (error) {
+      throw telegramClientError(error.message);
+    }
+    const binding = await findTelegramBindingByUser(identity.userId);
+    if (!binding) {
+      throw telegramClientError("Telegram account is not connected", 401);
+    }
+    return { binding, identity, ownerId: binding.owner };
+  };
+
+  const findTelegramOwnedLink = async (reference, ownerId) => {
+    const value = String(reference || "").trim().toLowerCase();
+    const filter = /^[a-z0-9]{15}$/.test(value)
+      ? client.filter("id = {:reference} && owner = {:owner}", { reference: value, owner: ownerId })
+      : client.filter("slug = {:reference} && owner = {:owner}", { reference: value, owner: ownerId });
+    try {
+      return await client.collection(LINKS_COLLECTION).getFirstListItem(filter);
+    } catch (error) {
+      if (error?.status === 404) return null;
+      throw error;
+    }
+  };
+
+  app.post("/api/internal/telegram/connect", async (request, response, next) => {
+    let identity;
+    let tokenHash;
+    try {
+      identity = normalizeTelegramIdentity(request.body);
+      tokenHash = hashTelegramLinkToken(request.body?.token, config.telegramInternalSecret);
+    } catch (error) {
+      return clientError(response, error.message);
+    }
+
+    try {
+      let tokenRecord;
+      try {
+        const filter = client.filter("tokenHash = {:tokenHash}", { tokenHash });
+        tokenRecord = await client.collection(TELEGRAM_LINK_TOKENS_COLLECTION).getFirstListItem(filter);
+      } catch (error) {
+        if (error?.status === 404) return clientError(response, "This Telegram login link is invalid or expired", 401);
+        throw error;
+      }
+
+      if (new Date(tokenRecord.expiresAt) <= new Date()) {
+        await client.collection(TELEGRAM_LINK_TOKENS_COLLECTION).delete(tokenRecord.id);
+        return clientError(response, "This Telegram login link is invalid or expired", 401);
+      }
+
+      await client.collection(TELEGRAM_LINK_TOKENS_COLLECTION).delete(tokenRecord.id);
+      const userBinding = await findTelegramBindingByUser(identity.userId);
+      if (userBinding && userBinding.owner !== tokenRecord.owner) {
+        return clientError(response, "This Telegram account is connected to another user", 409);
+      }
+      const ownerBinding = await findTelegramBindingByOwner(tokenRecord.owner);
+      const bindingPayload = {
+        owner: tokenRecord.owner,
+        telegramUserId: identity.userId,
+        chatId: identity.chatId,
+        username: identity.username,
+        firstName: identity.firstName,
+      };
+      if (ownerBinding) {
+        await client.collection(TELEGRAM_ACCOUNTS_COLLECTION).update(ownerBinding.id, bindingPayload);
+      } else {
+        await client.collection(TELEGRAM_ACCOUNTS_COLLECTION).create(bindingPayload);
+      }
+      const user = await client.collection(USERS_COLLECTION).getOne(tokenRecord.owner, {
+        fields: "id,email,name",
+      });
+      return response.json({ user: publicUser(user) });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  app.post("/api/internal/telegram/me", async (request, response, next) => {
+    try {
+      const { binding, ownerId } = await resolveTelegramOwner(request.body);
+      const user = await client.collection(USERS_COLLECTION).getOne(ownerId, { fields: "id,email,name" });
+      return response.json({
+        user: publicUser(user),
+        telegram: { username: binding.username || null, firstName: binding.firstName || null },
+      });
+    } catch (error) {
+      if (error?.telegramClientError) return clientError(response, error.message, error.status);
+      return next(error);
+    }
+  });
+
+  app.post("/api/internal/telegram/logout", async (request, response, next) => {
+    try {
+      const { binding } = await resolveTelegramOwner(request.body);
+      await client.collection(TELEGRAM_ACCOUNTS_COLLECTION).delete(binding.id);
+      return response.status(204).end();
+    } catch (error) {
+      if (error?.telegramClientError) return clientError(response, error.message, error.status);
+      return next(error);
+    }
+  });
+
+  app.post("/api/internal/telegram/links/list", async (request, response, next) => {
+    try {
+      const { ownerId } = await resolveTelegramOwner(request.body);
+      const filter = client.filter("owner = {:owner}", { owner: ownerId });
+      const records = await client.collection(LINKS_COLLECTION).getList(1, 20, {
+        filter,
+        sort: "-created",
+        fields: "id,slug,url,clicks,active,created,statsToken",
+      });
+      const baseUrl = getPublicBaseUrl(request, config.publicBaseUrl);
+      return response.json({
+        total: records.totalItems,
+        links: records.items.map((record) => ({
+          id: record.id,
+          slug: record.slug,
+          shortUrl: `${baseUrl}/${record.slug}`,
+          targetUrl: record.url,
+          statsUrl: `${baseUrl}/stats/${record.statsToken}`,
+          clicks: record.clicks,
+          active: record.active,
+        })),
+      });
+    } catch (error) {
+      if (error?.telegramClientError) return clientError(response, error.message, error.status);
+      return next(error);
+    }
+  });
+
+  app.post("/api/internal/telegram/links", async (request, response, next) => {
+    let url;
+    let alias;
+    try {
+      url = normalizeTargetUrl(request.body?.url);
+      alias = normalizeAlias(request.body?.alias);
+    } catch (error) {
+      return clientError(response, error.message);
+    }
+
+    try {
+      const { ownerId } = await resolveTelegramOwner(request.body);
+      const record = await createRecord(client, url, alias, ownerId, config.anonymousLinkTtlMs);
+      const baseUrl = getPublicBaseUrl(request, config.publicBaseUrl);
+      return response.status(201).json({
+        link: {
+          id: record.id,
+          slug: record.slug,
+          shortUrl: `${baseUrl}/${record.slug}`,
+          targetUrl: record.url,
+          statsUrl: `${baseUrl}/stats/${record.statsToken}`,
+          clicks: record.clicks,
+          active: record.active,
+        },
+      });
+    } catch (error) {
+      if (error?.telegramClientError) return clientError(response, error.message, error.status);
+      if (isUniqueSlugError(error)) return clientError(response, "This slug is already taken", 409);
+      return next(error);
+    }
+  });
+
+  app.patch("/api/internal/telegram/links/:reference", async (request, response, next) => {
+    let update;
+    try {
+      update = normalizeOwnedLinkUpdate(request.body);
+    } catch (error) {
+      return clientError(response, error.message);
+    }
+
+    try {
+      const { ownerId } = await resolveTelegramOwner(request.body);
+      const record = await findTelegramOwnedLink(request.params.reference, ownerId);
+      if (!record) return clientError(response, "Link not found", 404);
+      const updated = await client.collection(LINKS_COLLECTION).update(record.id, update);
+      const baseUrl = getPublicBaseUrl(request, config.publicBaseUrl);
+      return response.json({
+        link: {
+          id: updated.id,
+          slug: updated.slug,
+          shortUrl: `${baseUrl}/${updated.slug}`,
+          targetUrl: updated.url,
+          clicks: updated.clicks,
+          active: updated.active,
+        },
+      });
+    } catch (error) {
+      if (error?.telegramClientError) return clientError(response, error.message, error.status);
+      if (isUniqueSlugError(error)) return clientError(response, "This slug is already taken", 409);
+      return next(error);
+    }
+  });
+
+  app.post("/api/internal/telegram/links/:reference/stats", async (request, response, next) => {
+    try {
+      const { ownerId } = await resolveTelegramOwner(request.body);
+      const record = await findTelegramOwnedLink(request.params.reference, ownerId);
+      if (!record) return clientError(response, "Link not found", 404);
+      const filter = client.filter("link = {:link}", { link: record.id });
+      const events = await client.collection(CLICK_EVENTS_COLLECTION).getList(
+        1,
+        config.analyticsMaxEvents,
+        {
+          filter,
+          sort: "-created",
+          skipTotal: true,
+          fields: "countryCode,referrerHost,visitorHash,device,browser,os",
+        },
+      );
+      const analytics = buildAnalytics(events.items, record.clicks, 0, []);
+      const baseUrl = getPublicBaseUrl(request, config.publicBaseUrl);
+      return response.json({
+        link: {
+          id: record.id,
+          slug: record.slug,
+          shortUrl: `${baseUrl}/${record.slug}`,
+          targetUrl: record.url,
+          statsUrl: `${baseUrl}/stats/${record.statsToken}`,
+          active: record.active,
+        },
+        analytics: {
+          totals: analytics.totals,
+          countries: analytics.countries.slice(0, 5),
+          referrers: analytics.referrers.slice(0, 5),
+          devices: analytics.devices.slice(0, 5),
+        },
+      });
+    } catch (error) {
+      if (error?.telegramClientError) return clientError(response, error.message, error.status);
+      return next(error);
+    }
+  });
+
+  app.post("/api/internal/telegram/links/:reference/delete", async (request, response, next) => {
+    try {
+      const { ownerId } = await resolveTelegramOwner(request.body);
+      const record = await findTelegramOwnedLink(request.params.reference, ownerId);
+      if (!record) return clientError(response, "Link not found", 404);
+      await client.collection(LINKS_COLLECTION).delete(record.id);
+      return response.status(204).end();
+    } catch (error) {
+      if (error?.telegramClientError) return clientError(response, error.message, error.status);
+      return next(error);
+    }
+  });
+
   app.get("/api/links", authenticate, async (request, response, next) => {
     try {
       const filter = client.filter("owner = {:owner}", { owner: request.user.id });
@@ -590,8 +971,11 @@ export function createApp({
   };
 
   app.patch("/api/links/:id", apiLimiter, authenticate, async (request, response, next) => {
-    if (typeof request.body?.active !== "boolean") {
-      return clientError(response, "The active field must be true or false");
+    let update;
+    try {
+      update = normalizeOwnedLinkUpdate(request.body);
+    } catch (error) {
+      return clientError(response, error.message);
     }
 
     try {
@@ -599,9 +983,17 @@ export function createApp({
       if (!record) return clientError(response, "Link not found", 404);
       const updated = await client
         .collection(LINKS_COLLECTION)
-        .update(record.id, { active: request.body.active });
-      return response.json({ id: updated.id, active: updated.active });
+        .update(record.id, update);
+      const baseUrl = getPublicBaseUrl(request, config.publicBaseUrl);
+      return response.json({
+        id: updated.id,
+        slug: updated.slug,
+        shortUrl: `${baseUrl}/${updated.slug}`,
+        targetUrl: updated.url,
+        active: updated.active,
+      });
     } catch (error) {
+      if (isUniqueSlugError(error)) return clientError(response, "This slug is already taken", 409);
       return next(error);
     }
   });

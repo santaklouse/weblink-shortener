@@ -53,6 +53,9 @@ const schema = z
     SMTP_LOCAL_NAME: optionalString,
     MAIL_FROM_NAME: z.string().trim().min(1).max(255).default("Weblink Shortener"),
     MAIL_FROM_ADDRESS: optionalString,
+    TELEGRAM_BOT_USERNAME: optionalString,
+    TELEGRAM_INTERNAL_SECRET: optionalString,
+    TELEGRAM_LINK_TTL_MINUTES: z.coerce.number().int().min(1).max(60).default(10),
   })
   .superRefine((env, context) => {
     const hasPasswordAuth = env.POCKETBASE_SUPERUSER_EMAIL && env.POCKETBASE_SUPERUSER_PASSWORD;
@@ -135,6 +138,27 @@ const schema = z
         message: "PUBLIC_BASE_URL hostname must match APP_DOMAIN",
       });
     }
+    if (env.TELEGRAM_BOT_USERNAME && !/^(?=.{5,32}$)[A-Za-z][A-Za-z0-9_]*bot$/i.test(env.TELEGRAM_BOT_USERNAME)) {
+      context.addIssue({
+        code: "custom",
+        path: ["TELEGRAM_BOT_USERNAME"],
+        message: "TELEGRAM_BOT_USERNAME must be a valid bot username ending in bot",
+      });
+    }
+    if (env.TELEGRAM_INTERNAL_SECRET && env.TELEGRAM_INTERNAL_SECRET.length < 32) {
+      context.addIssue({
+        code: "custom",
+        path: ["TELEGRAM_INTERNAL_SECRET"],
+        message: "TELEGRAM_INTERNAL_SECRET must contain at least 32 characters",
+      });
+    }
+    if (Boolean(env.TELEGRAM_BOT_USERNAME) !== Boolean(env.TELEGRAM_INTERNAL_SECRET)) {
+      context.addIssue({
+        code: "custom",
+        path: ["TELEGRAM_BOT_USERNAME"],
+        message: "Set both TELEGRAM_BOT_USERNAME and TELEGRAM_INTERNAL_SECRET, or leave both empty",
+      });
+    }
   });
 
 export function loadConfig(environment = process.env) {
@@ -182,5 +206,8 @@ export function loadConfig(environment = process.env) {
     smtpLocalName: result.data.SMTP_LOCAL_NAME,
     mailFromName: result.data.MAIL_FROM_NAME,
     mailFromAddress: result.data.MAIL_FROM_ADDRESS,
+    telegramBotUsername: result.data.TELEGRAM_BOT_USERNAME,
+    telegramInternalSecret: result.data.TELEGRAM_INTERNAL_SECRET,
+    telegramLinkTtlMs: result.data.TELEGRAM_LINK_TTL_MINUTES * 60 * 1_000,
   };
 }
