@@ -192,7 +192,20 @@ export function createApp({
   );
   app.use(express.json({ limit: "8kb" }));
   app.use(cookieParser());
-  app.use(express.static(publicDirectory, { extensions: ["html"], maxAge: "1h" }));
+  const staticCache = config.staticCache !== false;
+  app.use(express.static(publicDirectory, {
+    extensions: ["html"],
+    etag: staticCache,
+    lastModified: staticCache,
+    maxAge: staticCache ? "1h" : 0,
+    setHeaders(response) {
+      if (!staticCache) {
+        response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+        response.setHeader("Pragma", "no-cache");
+        response.setHeader("Expires", "0");
+      }
+    },
+  }));
   app.use("/api", requireSameOrigin);
 
   const apiLimiter = rateLimit({

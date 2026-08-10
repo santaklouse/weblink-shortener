@@ -1,0 +1,6 @@
+services:
+  app:
+    environment:
+      STATIC_CACHE: "false"
+    volumes:
+      - ./public:/app/public:ro

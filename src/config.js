@@ -29,6 +29,7 @@ const schema = z
     POCKETBASE_SUPERUSER_EMAIL: optionalString,
     POCKETBASE_SUPERUSER_PASSWORD: optionalString,
     TRUST_PROXY: booleanFromEnv.default(false),
+    STATIC_CACHE: booleanFromEnv.default(true),
     RATE_LIMIT_MAX: z.coerce.number().int().min(1).max(10_000).default(30),
     SESSION_COOKIE_NAME: z
       .string()
@@ -184,6 +185,7 @@ export function loadConfig(environment = process.env) {
     pocketBaseEmail: result.data.POCKETBASE_SUPERUSER_EMAIL,
     pocketBasePassword: result.data.POCKETBASE_SUPERUSER_PASSWORD,
     trustProxy: result.data.TRUST_PROXY,
+    staticCache: result.data.STATIC_CACHE,
     rateLimitMax: result.data.RATE_LIMIT_MAX,
     sessionCookieName: result.data.SESSION_COOKIE_NAME,
     sessionMaxAgeMs: result.data.SESSION_MAX_AGE_DAYS * 24 * 60 * 60 * 1_000,

@@ -68,6 +68,51 @@ Start the stack:
 docker compose up -d --build
 ```
 
+## Live editing public files
+
+Use the development Compose override when files saved in the local `public` directory must become immediately visible inside the running application container:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile telegram up -d --build app telegram-bot nginx cloudflared
+```
+
+The override mounts `./public` at `/app/public` as read-only and sets `STATIC_CACHE=false`. After the first build, editing and saving `public/telegram-webapp.js`, `public/telegram.html`, or CSS files does not require a rebuild or container restart.
+
+Cloudflare must not cache the Telegram development assets. In the Cloudflare dashboard create a Cache Rule with this expression:
+
+```text
+(http.host eq "l1n.pp.ua" and starts_with(http.request.uri.path, "/telegram"))
+```
+
+Set **Cache eligibility** to **Bypass cache**. Then purge these URLs once so objects cached before the rule are removed:
+
+```text
+https://l1n.pp.ua/telegram
+https://l1n.pp.ua/telegram-webapp.js?v=1
+https://l1n.pp.ua/telegram-webapp.css?v=2
+```
+
+After saving a file, close and reopen the Telegram Mini App or reload it. Verify that the public response is no longer cached:
+
+```bash
+curl -I "https://l1n.pp.ua/telegram-webapp.js?live-check=1"
+```
+
+The response must include `Cache-Control: no-store, no-cache, must-revalidate` and must not report `CF-Cache-Status: HIT`.
+
+Confirm that the local file and mounted container file are identical:
+
+```bash
+shasum -a 256 public/telegram-webapp.js
+docker compose -f docker-compose.yml -f docker-compose.dev.yml exec app sha256sum /app/public/telegram-webapp.js
+```
+
+Changes under `src` still require rebuilding and recreating the Node.js container. To return to the normal immutable production image and one-hour static caching, run:
+
+```bash
+docker compose up -d --build --force-recreate app
+```
+
 Docker Compose automatically:
 
 1. Builds PocketBase 0.39.9 and runs `./pocketbase serve --http=0.0.0.0:8090`.
