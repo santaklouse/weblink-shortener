@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content="Manage Weblink Shortener links inside Telegram" />
+    <title>Weblink Shortener</title>
+    <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
+    <link rel="stylesheet" href="/telegram-webapp.css?v=1" />
+    <script src="/telegram-webapp.js?v=1" defer></script>
+  </head>
+  <body>
+    <main class="mini-app-shell">
+      <section id="loading-panel" class="state-panel" aria-live="polite">
+        <span class="spinner" aria-hidden="true"></span>
+        <p>Opening your dashboard…</p>
+      </section>
+
+      <section id="error-panel" class="state-panel" hidden>
+        <div class="state-icon" aria-hidden="true">!</div>
+        <h1>Could not open the Mini App</h1>
+        <p id="error-message">Open this page from the bot in Telegram.</p>
+        <button id="retry-button" type="button">Try again</button>
+      </section>
+
+      <section id="connect-panel" class="state-panel" hidden>
+        <div class="state-icon" aria-hidden="true">↗</div>
+        <h1>Connect your account</h1>
+        <p>Sign in on the website, choose <strong>Connect Telegram</strong>, then open the one-time bot link.</p>
+        <button id="open-website-button" type="button">Open website</button>
+      </section>
+
+      <div id="app-panel" hidden>
+        <header class="app-header">
+          <div>
+            <p class="eyebrow">Telegram Mini App</p>
+            <h1>My links</h1>
+            <p id="account-label" class="account-label"></p>
+          </div>
+          <button id="refresh-button" class="icon-button" type="button" aria-label="Refresh links" title="Refresh">↻</button>
+        </header>
+
+        <section class="surface create-surface" aria-labelledby="create-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">New short link</p>
+              <h2 id="create-title">Create</h2>
+            </div>
+          </div>
+          <form id="create-form">
+            <label for="create-url">Destination URL</label>
+            <input id="create-url" name="url" type="url" inputmode="url" autocomplete="url" required />
+            <label for="create-slug">Custom slug <span>optional</span></label>
+            <input id="create-slug" name="slug" type="text" minlength="4" maxlength="32" pattern="[a-zA-Z0-9_-]{4,32}" autocomplete="off" />
+            <button type="submit">Create short link</button>
+            <p id="create-message" class="form-message" role="status" aria-live="polite"></p>
+          </form>
+        </section>
+
+        <section class="links-section" aria-labelledby="links-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Dashboard</p>
+              <h2 id="links-title">Your links</h2>
+            </div>
+            <span id="links-count" class="count-badge">0</span>
+          </div>
+          <p id="links-message" class="form-message" role="status" aria-live="polite"></p>
+          <div id="links-list" class="links-list"></div>
+          <div id="empty-links" class="empty-state" hidden>
+            <p>No links yet. Create your first short link above.</p>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <dialog id="edit-dialog" class="mini-dialog" aria-labelledby="edit-title">
+      <form id="edit-form">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">Owned link</p>
+            <h2 id="edit-title">Edit link</h2>
+          </div>
+          <button id="edit-close" class="icon-button" type="button" aria-label="Close">×</button>
+        </div>
+        <label for="edit-url">Destination URL</label>
+        <input id="edit-url" name="url" type="url" inputmode="url" autocomplete="url" required />
+        <label for="edit-slug">Slug</label>
+        <input id="edit-slug" name="slug" type="text" minlength="4" maxlength="32" pattern="[a-zA-Z0-9_-]{4,32}" autocomplete="off" required />
+        <p id="edit-message" class="form-message" role="status" aria-live="polite"></p>
+        <button type="submit">Save changes</button>
+      </form>
+    </dialog>
+
+    <dialog id="stats-dialog" class="mini-dialog stats-dialog" aria-labelledby="stats-title">
+      <div class="dialog-heading">
+        <div>
+          <p class="eyebrow">Analytics</p>
+          <h2 id="stats-title">Statistics</h2>
+        </div>
+        <button id="stats-close" class="icon-button" type="button" aria-label="Close">×</button>
+      </div>
+      <div id="stats-content"></div>
+      <button id="open-detailed-stats" type="button">Open detailed statistics</button>
+    </dialog>
+  </body>
+</html>

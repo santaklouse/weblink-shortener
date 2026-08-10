@@ -28,7 +28,7 @@ export function validateTelegramWebAppInitData(initData, botToken, {
 
   parameters.delete("hash");
   const dataCheckString = [...parameters.entries()]
-    .sort(([left], [right]) => left.localeCompare(right))
+    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
     .map(([key, value]) => `${key}=${value}`)
     .join("\n");
   const secretKey = createHmac("sha256", "WebAppData").update(botToken).digest();

@@ -13,6 +13,7 @@ A minimal Node.js URL shortener with PocketBase running behind the application.
 - Users can sign in or create an account with Google OAuth 2.0.
 - Signed-in users can securely connect a Telegram bot with a one-time deep link.
 - The Telegram bot can create, list, edit, enable, disable, delete, and inspect owned links.
+- A Telegram Mini App provides the same link management and statistics inside Telegram.
 - Registered users receive permanent links and a dashboard with click statistics.
 - Custom slugs are available only to registered users and must be unique.
 - Registered owners can enable, disable, and delete their links.
@@ -113,7 +114,20 @@ The setup container enables Google OAuth for the PocketBase `users` collection a
 
 ## Telegram bot
 
-Create the bot in Telegram by opening [@BotFather](https://t.me/BotFather), running `/newbot`, and following its prompts. Save the returned token as `TELEGRAM_BOT_TOKEN` and the bot username without `@` as `TELEGRAM_BOT_USERNAME`. Generate `TELEGRAM_INTERNAL_SECRET` with the command shown above; do not reuse the bot token or analytics secret.
+Create the bot in Telegram by opening [@BotFather](https://t.me/BotFather), running `/newbot`, and following its prompts. Save the returned token as `TELEGRAM_BOT_TOKEN` and the bot username without `@` as `TELEGRAM_BOT_USERNAME`. Generate `TELEGRAM_INTERNAL_SECRET` with the command shown above; do not reuse the bot token or analytics secret. Set `TELEGRAM_WEBAPP_URL` to the public HTTPS URL of the Mini App; this deployment uses `https://l1n.pp.ua/telegram`.
+
+### BotFather configuration
+
+For `@weblink_shortener_bot`, use these exact settings in [@BotFather](https://t.me/BotFather):
+
+1. Send `/mybots` and select `@weblink_shortener_bot`.
+2. Open **Bot Settings → Configure Mini App → Enable Mini App**.
+3. When BotFather asks for the Mini App URL, send `https://l1n.pp.ua/telegram`.
+4. Open **Bot Settings → Menu Button**. Set the button text to `Open app` and its URL to `https://l1n.pp.ua/telegram`.
+5. Optionally open **Edit Bot → Edit Description** and use `Create, manage, and inspect short links from Telegram.`
+6. Optionally open **Edit Bot → Edit About** and use `A secure short-link dashboard with detailed click statistics.`
+
+The bot also calls `setChatMenuButton` during startup, so step 4 is restored automatically after each deployment. Configuring the Main Mini App in step 2 is still recommended because it adds a prominent launch button to the bot profile.
 
 Start the Telegram profile:
 
@@ -132,6 +146,7 @@ The website never sends an email password, Google token, PocketBase token, or br
 
 Available commands:
 
+- `/app`
 - `/new <URL> [slug]`
 - `/links`
 - `/stats <slug>`
@@ -142,7 +157,7 @@ Available commands:
 - `/logout`
 - `/help`
 
-The bot communicates only with the private Node.js API at `http://app:3000` inside the Compose network. It never connects to PocketBase directly. Long polling is used, so no public Telegram webhook or additional domain is required.
+The bot communicates only with the private Node.js API at `http://app:3000` inside the Compose network. It never connects to PocketBase directly. Long polling is used, so no public Telegram webhook or additional domain is required. The Mini App sends Telegram `initData` to Node.js, which delegates signature validation to the bot's private validator on port `3001`. The bot token is never exposed to Node.js or the browser.
 
 ## Email verification
 
@@ -295,6 +310,8 @@ Set either `POCKETBASE_TOKEN` or both `POCKETBASE_SUPERUSER_EMAIL` and `POCKETBA
 - `GEOIP_DB_PATH=/geoip/GeoLite2-Country.mmdb`: local MaxMind database path.
 - `TRUST_CLOUDFLARE_HEADERS=false`: trust Cloudflare location and visitor-IP headers.
 - `TELEGRAM_LINK_TTL_MINUTES=10`: one-time Telegram login link lifetime.
+- `TELEGRAM_WEBAPP_URL=https://l1n.pp.ua/telegram`: public HTTPS Mini App URL.
+- `TELEGRAM_WEBAPP_AUTH_MAX_AGE_SECONDS=86400`: maximum accepted age of signed Telegram Mini App authentication data.
 - `TELEGRAM_POLL_TIMEOUT_SECONDS=25`: Telegram Bot API long-poll timeout.
 
 ## Verification
